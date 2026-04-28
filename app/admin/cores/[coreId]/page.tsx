@@ -2,6 +2,7 @@
 import { useState, useEffect, use } from 'react'
 import api from '@/lib/api'
 import type { Core, CoreDataItem, CoreLanguageConfig, Language } from '@/types'
+import { getStoredUser } from '@/lib/auth'
 
 interface StockerUser { id: string; name: string; email: string }
 import PageHeader from '@/components/ui/PageHeader'
@@ -145,14 +146,22 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
       {/* Items tab */}
       {tab === 'items' && (
         <div>
+          {/* Read-only banner when Core is assigned to another user */}
+          {core.assigned_stocker_id && core.assigned_stocker_id !== getStoredUser()?.id && (
+            <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
+              🔒 <span>This Core is assigned to a Stocker for data entry. You can view the data but cannot add or edit items.</span>
+            </div>
+          )}
           <div className="flex gap-3 mb-4">
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search items…"
               className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
-            <button onClick={() => { setShowAddItem(true); setError('') }}
-              className="px-3 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium">
-              + Add Item
-            </button>
+            {(!core.assigned_stocker_id || core.assigned_stocker_id === getStoredUser()?.id) && (
+              <button onClick={() => { setShowAddItem(true); setError('') }}
+                className="px-3 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium">
+                + Add Item
+              </button>
+            )}
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
@@ -235,6 +244,11 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
       {/* CSV Upload tab */}
       {tab === 'upload' && (
         <div className="max-w-lg">
+          {core.assigned_stocker_id && core.assigned_stocker_id !== getStoredUser()?.id && (
+            <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
+              🔒 <span>This Core is assigned to a Stocker. Only the assigned Stocker can upload data.</span>
+            </div>
+          )}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 text-sm text-blue-800">
             <p className="font-medium mb-1">CSV format</p>
             <p>Required column: <code className="bg-blue-100 px-1 rounded">english_value</code></p>
@@ -247,7 +261,8 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
           {uploadFile && (
             <div className="mt-4">
               <p className="text-sm text-slate-600 mb-2">Selected: <strong>{uploadFile.name}</strong></p>
-              <button onClick={uploadCsv} disabled={uploading}
+              <button onClick={uploadCsv}
+                disabled={uploading || !!(core.assigned_stocker_id && core.assigned_stocker_id !== getStoredUser()?.id)}
                 className="px-4 py-2 bg-teal-600 text-white text-sm rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2">
                 {uploading && <LoadingSpinner size="sm" />}
                 {uploading ? 'Uploading…' : 'Upload CSV'}

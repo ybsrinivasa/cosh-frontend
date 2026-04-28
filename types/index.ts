@@ -45,6 +45,7 @@ export interface Core {
   status: Status
   is_public: boolean
   legacy_core_id: string | null
+  assigned_stocker_id: string | null
   created_at: string
 }
 
@@ -99,6 +100,7 @@ export interface Connect {
   status: Status
   schema_finalised: boolean
   is_public: boolean
+  assigned_stocker_id: string | null
   created_at: string
 }
 

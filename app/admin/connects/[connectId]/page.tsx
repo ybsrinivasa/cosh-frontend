@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, use, useCallback, useRef } from 'react'
 import Link from 'next/link'
+import { getStoredUser } from '@/lib/auth'
 import api from '@/lib/api'
 import type { Connect, SchemaPosition, ConnectDataItem, Core, RelationshipType } from '@/types'
 import PageHeader from '@/components/ui/PageHeader'
@@ -401,7 +402,15 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
             </div>
           ) : (
             <>
-              {/* ── Manual entry form ────────────────────────────────────────── */}
+              {/* Read-only banner when Connect is assigned to another user */}
+              {connect.assigned_stocker_id && connect.assigned_stocker_id !== getStoredUser()?.id && (
+                <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
+                  🔒 <span>This Connect is assigned to a Stocker for data entry. You can view the data but cannot add rows.</span>
+                </div>
+              )}
+
+              {/* ── Manual entry form — hidden when read-only ────────────────── */}
+              {(!connect.assigned_stocker_id || connect.assigned_stocker_id === getStoredUser()?.id) && (
               <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6">
                 <h3 className="text-sm font-semibold text-slate-800 mb-4">Add new row</h3>
 
@@ -466,6 +475,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                   </p>
                 )}
               </div>
+              )}  {/* end conditional entry form */}
 
               {/* ── Data table ───────────────────────────────────────────────── */}
               <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
@@ -542,7 +552,8 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
           {uploadFile && (
             <div className="mt-4">
               <p className="text-sm text-slate-600 mb-2">Selected: <strong>{uploadFile.name}</strong></p>
-              <button onClick={uploadExcel} disabled={uploading || schema.length === 0}
+              <button onClick={uploadExcel}
+                disabled={uploading || schema.length === 0 || !!(connect.assigned_stocker_id && connect.assigned_stocker_id !== getStoredUser()?.id)}
                 className="px-4 py-2 bg-teal-600 text-white text-sm rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2">
                 {uploading && <LoadingSpinner size="sm" />}
                 {uploading ? 'Processing…' : 'Upload Excel'}
