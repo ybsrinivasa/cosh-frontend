@@ -129,6 +129,7 @@ export interface ExcelUploadReport {
   total_rows: number
   resolved: number
   unresolved: number
+  skipped_duplicates: number
   unresolved_details: { row: number; errors: string[] }[]
 }
 
