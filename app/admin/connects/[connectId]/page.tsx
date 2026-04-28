@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, use, useCallback } from 'react'
+import { useState, useEffect, use, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import api from '@/lib/api'
 import type { Connect, SchemaPosition, ConnectDataItem, Core, RelationshipType } from '@/types'
@@ -26,7 +26,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
   // Core items for dropdowns — loaded lazily when Data tab opens
   const [coreItemsMap, setCoreItemsMap] = useState<Record<string, ComboboxItem[]>>({})
   const [coreItemsLoading, setCoreItemsLoading] = useState(false)
-  const [coreItemsLoaded, setCoreItemsLoaded] = useState(false)
+  const coreItemsFetchedRef = useRef(false)  // ref guard prevents loop
 
   // Manual entry form state
   // selection: position_number → core_data_item_id
@@ -93,10 +93,13 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
   }
 
   const loadCoreItems = useCallback(async () => {
-    if (coreItemsLoaded || coreItemsLoading || schema.length === 0) return
+    // ref guard: runs exactly once per schema version, even if component re-renders
+    if (coreItemsFetchedRef.current || schema.length === 0) return
+    coreItemsFetchedRef.current = true
     setCoreItemsLoading(true)
     try {
       const map: Record<string, ComboboxItem[]> = {}
+      const valueUpdates: Record<string, string> = {}
       await Promise.all(
         schema.map(async pos => {
           const { data } = await api.get(`/cores/${pos.core_id}/items?status_filter=ACTIVE`)
@@ -104,22 +107,20 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
             id: item.id,
             label: item.english_value,
           }))
-          // Also update value map
-          setItemValueMap(prev => {
-            const next = { ...prev }
-            data.forEach((item: { id: string; english_value: string }) => {
-              next[item.id] = item.english_value
-            })
-            return next
+          data.forEach((item: { id: string; english_value: string }) => {
+            valueUpdates[item.id] = item.english_value
           })
         })
       )
       setCoreItemsMap(map)
-      setCoreItemsLoaded(true)
+      setItemValueMap(prev => ({ ...prev, ...valueUpdates }))
+    } catch {
+      // If fetch fails, allow retry on next tab switch
+      coreItemsFetchedRef.current = false
     } finally {
       setCoreItemsLoading(false)
     }
-  }, [schema, coreItemsLoaded, coreItemsLoading])
+  }, [schema])  // only recreate when schema changes
 
   // Load core items when Data tab opens
   useEffect(() => {
@@ -419,7 +420,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                             items={coreItemsMap[pos.core_id] || []}
                             value={selection[pos.position_number] || ''}
                             onChange={id => setPos(pos.position_number, id)}
-                            placeholder={`Search ${coreMap[pos.core_id] || ''}…`}
+                            placeholder={coreItemsLoading ? 'Loading…' : `Search ${coreMap[pos.core_id] || ''}…`}
                             loading={coreItemsLoading}
                           />
                         </div>
