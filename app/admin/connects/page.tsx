@@ -1,0 +1,110 @@
+'use client'
+import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import api from '@/lib/api'
+import type { Connect } from '@/types'
+import PageHeader from '@/components/ui/PageHeader'
+import Badge from '@/components/ui/Badge'
+import Modal from '@/components/ui/Modal'
+import LoadingSpinner from '@/components/ui/LoadingSpinner'
+
+export default function ConnectsPage() {
+  const [connects, setConnects] = useState<Connect[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showModal, setShowModal] = useState(false)
+  const [form, setForm] = useState({ name: '', description: '' })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => { load() }, [])
+
+  async function load() {
+    try {
+      const { data } = await api.get('/connects')
+      setConnects(data)
+    } finally { setLoading(false) }
+  }
+
+  async function create() {
+    if (!form.name.trim()) return
+    setSaving(true); setError('')
+    try {
+      await api.post('/connects', { name: form.name.trim(), description: form.description || null })
+      setForm({ name: '', description: '' }); setShowModal(false); load()
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setError(err.response?.data?.detail || 'Failed to create connect')
+    } finally { setSaving(false) }
+  }
+
+  if (loading) return <div className="flex justify-center py-20"><LoadingSpinner size="lg" /></div>
+
+  return (
+    <div>
+      <PageHeader
+        title="Connects"
+        subtitle={`${connects.length} connect${connects.length !== 1 ? 's' : ''}`}
+        action={
+          <button onClick={() => { setShowModal(true); setError('') }}
+            className="px-3 py-1.5 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium">
+            + New Connect
+          </button>
+        }
+      />
+
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        {connects.length === 0 ? (
+          <div className="text-center py-16 text-slate-400">
+            <p className="text-4xl mb-3">🔗</p>
+            <p className="font-medium">No connects yet</p>
+            <p className="text-sm">Create a Connect to define relationships between Cores</p>
+          </div>
+        ) : (
+          connects.map(connect => (
+            <Link key={connect.id} href={`/admin/connects/${connect.id}`}
+              className="flex items-center justify-between px-5 py-4 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
+              <div>
+                <p className="font-medium text-slate-800">{connect.name}</p>
+                {connect.description && <p className="text-sm text-slate-400 mt-0.5">{connect.description}</p>}
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge label={connect.status} variant={connect.status} />
+                {connect.schema_finalised && <Badge label="Schema locked" variant="active" />}
+                {connect.is_public && <Badge label="Public" variant="active" />}
+                <span className="text-slate-300">›</span>
+              </div>
+            </Link>
+          ))
+        )}
+      </div>
+
+      {showModal && (
+        <Modal title="New Connect" onClose={() => setShowModal(false)}>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
+              <input autoFocus value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+                onKeyDown={e => e.key === 'Enter' && create()}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                placeholder="e.g. Brand to Manufacturer" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Description (optional)</label>
+              <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                placeholder="What does this Connect represent?" />
+            </div>
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-slate-600">Cancel</button>
+              <button onClick={create} disabled={saving || !form.name.trim()}
+                className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2">
+                {saving && <LoadingSpinner size="sm" />} Create Connect
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  )
+}
