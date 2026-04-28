@@ -81,7 +81,7 @@ export default function UsersPage() {
               <p className="text-sm text-slate-400">{user.email}</p>
               <div className="flex gap-1 mt-1">
                 {user.roles.filter(r => r.status === 'ACTIVE').map(r => (
-                  <Badge key={r.id} label={r.role} variant={r.role.toLowerCase()} />
+                  <Badge key={r.role} label={r.role} variant={r.role.toLowerCase()} />
                 ))}
               </div>
             </div>
