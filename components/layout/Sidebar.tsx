@@ -1,21 +1,31 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { getStoredUser, logout, isAdmin } from '@/lib/auth'
+import { getStoredUser, logout, isAdmin, hasRole } from '@/lib/auth'
 import { useEffect, useState } from 'react'
 import type { User } from '@/types'
 
-const nav = [
-  { href: '/admin/folders',    label: 'Folders & Cores',   icon: '📁' },
-  { href: '/admin/connects',   label: 'Connects',           icon: '🔗' },
-  { href: '/admin/similarity', label: 'Similarity Review',  icon: '🔍' },
-  { href: '/admin/sync',       label: 'Sync',               icon: '🔄' },
-  { href: '/admin/migration',  label: 'Migration Status',   icon: '📊' },
+// Visible to all authenticated roles
+const stockerNav = [
+  { href: '/admin/folders',  label: 'Folders & Cores', icon: '📁' },
+  { href: '/admin/connects', label: 'Connects',         icon: '🔗' },
 ]
 
+// Visible to Reviewer, Designer, Admin
+const reviewerNav = [
+  { href: '/admin/similarity', label: 'Similarity Review', icon: '🔍' },
+]
+
+// Visible to Designer and Admin only
+const designerNav = [
+  { href: '/admin/sync',      label: 'Sync',             icon: '🔄' },
+  { href: '/admin/migration', label: 'Migration Status', icon: '📊' },
+]
+
+// Visible to Admin only
 const adminNav = [
-  { href: '/admin/users',      label: 'Users',              icon: '👥' },
-  { href: '/admin/registries', label: 'Registries',         icon: '📋' },
+  { href: '/admin/users',      label: 'Users',      icon: '👥' },
+  { href: '/admin/registries', label: 'Registries', icon: '📋' },
 ]
 
 export default function Sidebar() {
@@ -41,7 +51,24 @@ export default function Sidebar() {
 
       {/* Main nav */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {nav.map((item) => (
+        {/* All roles */}
+        {stockerNav.map(item => (
+          <Link key={item.href} href={item.href} className={linkClass(item.href)}>
+            <span>{item.icon}</span>
+            <span>{item.label}</span>
+          </Link>
+        ))}
+
+        {/* Reviewer, Designer, Admin */}
+        {hasRole(user, 'REVIEWER', 'DESIGNER', 'ADMIN') && reviewerNav.map(item => (
+          <Link key={item.href} href={item.href} className={linkClass(item.href)}>
+            <span>{item.icon}</span>
+            <span>{item.label}</span>
+          </Link>
+        ))}
+
+        {/* Designer and Admin */}
+        {hasRole(user, 'DESIGNER', 'ADMIN') && designerNav.map(item => (
           <Link key={item.href} href={item.href} className={linkClass(item.href)}>
             <span>{item.icon}</span>
             <span>{item.label}</span>
