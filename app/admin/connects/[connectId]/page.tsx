@@ -3,6 +3,8 @@ import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
 import api from '@/lib/api'
 import type { Connect, SchemaPosition, ConnectDataItem, Core, RelationshipType } from '@/types'
+
+interface StockerUser { id: string; name: string; email: string }
 import PageHeader from '@/components/ui/PageHeader'
 import Badge from '@/components/ui/Badge'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -21,7 +23,11 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
   const [relTypes, setRelTypes] = useState<RelationshipType[]>([])
   const [itemValueMap, setItemValueMap] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'schema' | 'data' | 'upload'>('schema')
+  const [tab, setTab] = useState<'schema' | 'data' | 'upload' | 'settings'>('schema')
+  const [stockers, setStockers] = useState<StockerUser[]>([])
+  const [assignedStockerId, setAssignedStockerId] = useState<string>('')
+  const [savingAssignment, setSavingAssignment] = useState(false)
+  const [assignmentMsg, setAssignmentMsg] = useState('')
 
   // Schema builder state
   const [positions, setPositions] = useState<PositionRow[]>([
@@ -41,18 +47,21 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
 
   async function load() {
     try {
-      const [c, s, i, cr, rt] = await Promise.all([
+      const [c, s, i, cr, rt, st] = await Promise.all([
         api.get(`/connects/${connectId}`),
         api.get(`/connects/${connectId}/schema`),
         api.get(`/connects/${connectId}/items`),
         api.get('/cores'),
         api.get('/admin/registries/relationship-types'),
+        api.get('/admin/users/by-role/STOCKER').catch(() => ({ data: [] })),
       ])
       setConnect(c.data)
       setSchema(s.data)
       setItems(i.data)
       setCores(cr.data)
       setRelTypes(rt.data)
+      setStockers(st.data)
+      setAssignedStockerId(c.data.assigned_stocker_id || '')
 
       // Fetch English values for all cores in schema positions
       const schemaCoreIds = [...new Set((s.data as SchemaPosition[]).map(p => p.core_id))]
@@ -146,6 +155,17 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
     } finally { setUploading(false) }
   }
 
+  async function saveAssignment() {
+    setSavingAssignment(true); setAssignmentMsg('')
+    try {
+      await api.put(`/connects/${connectId}`, { assigned_stocker_id: assignedStockerId || null })
+      setAssignmentMsg('✓ Saved')
+      load()
+    } catch {
+      setAssignmentMsg('✗ Failed to save')
+    } finally { setSavingAssignment(false) }
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
 
   if (loading) return <div className="flex justify-center py-20"><LoadingSpinner size="lg" /></div>
@@ -164,10 +184,10 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 border-b border-slate-200">
-        {(['schema', 'data', 'upload'] as const).map(t => (
+        {(['schema', 'data', 'upload', 'settings'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-medium transition-colors ${tab === t ? 'border-b-2 border-teal-600 text-teal-600' : 'text-slate-500 hover:text-slate-700'}`}>
-            {t === 'schema' ? 'Schema' : t === 'data' ? `Data (${items.length})` : 'Excel Upload'}
+            {t === 'schema' ? 'Schema' : t === 'data' ? `Data (${items.length})` : t === 'upload' ? 'Excel Upload' : 'Settings'}
           </button>
         ))}
       </div>
@@ -373,6 +393,46 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
               {uploadErrors}
             </pre>
           )}
+        </div>
+      )}
+
+      {/* ── Settings tab ───────────────────────────────────────────────────── */}
+      {tab === 'settings' && (
+        <div className="max-w-lg space-y-6">
+          <div className="bg-white border border-slate-200 rounded-xl p-5">
+            <h3 className="font-medium text-slate-800 mb-1">Assigned Stocker</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              The Stocker responsible for uploading and maintaining data rows in this Connect.
+            </p>
+            <div className="flex gap-3 items-center">
+              <select
+                value={assignedStockerId}
+                onChange={e => setAssignedStockerId(e.target.value)}
+                className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              >
+                <option value="">— Unassigned —</option>
+                {stockers.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={saveAssignment}
+                disabled={savingAssignment}
+                className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2 flex-shrink-0"
+              >
+                {savingAssignment && <LoadingSpinner size="sm" />}
+                Save
+              </button>
+            </div>
+            {stockers.length === 0 && (
+              <p className="text-xs text-slate-400 mt-2">No Stockers found. Ask an Admin to create a user with the STOCKER role first.</p>
+            )}
+            {assignmentMsg && (
+              <p className={`text-sm mt-2 ${assignmentMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-600'}`}>
+                {assignmentMsg}
+              </p>
+            )}
+          </div>
         </div>
       )}
     </div>

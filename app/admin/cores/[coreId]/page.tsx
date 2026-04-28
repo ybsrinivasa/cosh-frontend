@@ -2,6 +2,8 @@
 import { useState, useEffect, use } from 'react'
 import api from '@/lib/api'
 import type { Core, CoreDataItem, CoreLanguageConfig, Language } from '@/types'
+
+interface StockerUser { id: string; name: string; email: string }
 import PageHeader from '@/components/ui/PageHeader'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
@@ -15,7 +17,11 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
   const [languages, setLanguages] = useState<CoreLanguageConfig[]>([])
   const [allLanguages, setAllLanguages] = useState<Language[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'items' | 'languages' | 'upload'>('items')
+  const [tab, setTab] = useState<'items' | 'languages' | 'upload' | 'settings'>('items')
+  const [stockers, setStockers] = useState<StockerUser[]>([])
+  const [assignedStockerId, setAssignedStockerId] = useState<string>('')
+  const [savingAssignment, setSavingAssignment] = useState(false)
+  const [assignmentMsg, setAssignmentMsg] = useState('')
   const [search, setSearch] = useState('')
   const [showAddItem, setShowAddItem] = useState(false)
   const [newValue, setNewValue] = useState('')
@@ -30,13 +36,16 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
 
   async function load() {
     try {
-      const [c, i, l, al] = await Promise.all([
+      const [c, i, l, al, st] = await Promise.all([
         api.get(`/cores/${coreId}`),
         api.get(`/cores/${coreId}/items`),
         api.get(`/cores/${coreId}/languages`),
         api.get('/admin/registries/languages').catch(() => ({ data: [] })),
+        api.get('/admin/users/by-role/STOCKER').catch(() => ({ data: [] })),
       ])
       setCore(c.data); setItems(i.data); setLanguages(l.data); setAllLanguages(al.data)
+      setStockers(st.data)
+      setAssignedStockerId(c.data.assigned_stocker_id || '')
     } finally { setLoading(false) }
   }
 
@@ -50,6 +59,17 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
       const err = e as { response?: { data?: { detail?: string } } }
       setError(err.response?.data?.detail || 'Failed to add item')
     } finally { setSaving(false) }
+  }
+
+  async function saveAssignment() {
+    setSavingAssignment(true); setAssignmentMsg('')
+    try {
+      await api.put(`/cores/${coreId}`, { assigned_stocker_id: assignedStockerId || null })
+      setAssignmentMsg('✓ Saved')
+      load()
+    } catch {
+      setAssignmentMsg('✗ Failed to save')
+    } finally { setSavingAssignment(false) }
   }
 
   async function toggleStatus(item: CoreDataItem) {
@@ -114,10 +134,10 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 border-b border-slate-200">
-        {(['items', 'languages', 'upload'] as const).map(t => (
+        {(['items', 'languages', 'upload', 'settings'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${tab === t ? 'border-b-2 border-teal-600 text-teal-600' : 'text-slate-500 hover:text-slate-700'}`}>
-            {t === 'items' ? `Items (${items.length})` : t === 'languages' ? `Languages (${languages.length})` : 'CSV Upload'}
+            {t === 'items' ? `Items (${items.length})` : t === 'languages' ? `Languages (${languages.length})` : t === 'upload' ? 'CSV Upload' : 'Settings'}
           </button>
         ))}
       </div>
@@ -239,6 +259,47 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
               {uploadResult}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Settings tab */}
+      {tab === 'settings' && (
+        <div className="max-w-lg space-y-6">
+          {/* Assign stocker */}
+          <div className="bg-white border border-slate-200 rounded-xl p-5">
+            <h3 className="font-medium text-slate-800 mb-1">Assigned Stocker</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              The Stocker responsible for adding and maintaining data items in this Core.
+            </p>
+            <div className="flex gap-3 items-center">
+              <select
+                value={assignedStockerId}
+                onChange={e => setAssignedStockerId(e.target.value)}
+                className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+              >
+                <option value="">— Unassigned —</option>
+                {stockers.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={saveAssignment}
+                disabled={savingAssignment}
+                className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2 flex-shrink-0"
+              >
+                {savingAssignment && <LoadingSpinner size="sm" />}
+                Save
+              </button>
+            </div>
+            {stockers.length === 0 && (
+              <p className="text-xs text-slate-400 mt-2">No Stockers found. Ask an Admin to create a user with the STOCKER role first.</p>
+            )}
+            {assignmentMsg && (
+              <p className={`text-sm mt-2 ${assignmentMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-600'}`}>
+                {assignmentMsg}
+              </p>
+            )}
+          </div>
         </div>
       )}
 
