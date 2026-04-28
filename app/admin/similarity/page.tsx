@@ -6,6 +6,8 @@ import PageHeader from '@/components/ui/PageHeader'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import AccessDenied from '@/components/ui/AccessDenied'
+import { getStoredUser, hasRole } from '@/lib/auth'
 
 const REASON_LABELS: Record<string, string> = {
   EXACT_DUPLICATE: 'Exact Duplicate',
@@ -26,7 +28,10 @@ export default function SimilarityPage() {
   const [triggeringFirstPass, setTriggeringFirstPass] = useState(false)
   const [firstPassResult, setFirstPassResult] = useState('')
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    if (!hasRole(getStoredUser(), 'ADMIN', 'DESIGNER', 'REVIEWER')) { setLoading(false); return }
+    load()
+  }, [])
 
   async function load() {
     try {
@@ -63,6 +68,8 @@ export default function SimilarityPage() {
   }
 
   if (loading) return <div className="flex justify-center py-20"><LoadingSpinner size="lg" /></div>
+  if (!hasRole(getStoredUser(), 'ADMIN', 'DESIGNER', 'REVIEWER'))
+    return <AccessDenied message="Similarity Review requires Reviewer, Designer, or Admin role." />
 
   return (
     <div>

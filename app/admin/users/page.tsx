@@ -6,6 +6,8 @@ import PageHeader from '@/components/ui/PageHeader'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { getStoredUser, isAdmin } from '@/lib/auth'
+import AccessDenied from '@/components/ui/AccessDenied'
 
 const ROLES: Role[] = ['ADMIN', 'DESIGNER', 'STOCKER', 'REVIEWER']
 
@@ -17,7 +19,10 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    if (!isAdmin(getStoredUser())) { setLoading(false); return }
+    load()
+  }, [])
 
   async function load() {
     try {
@@ -53,6 +58,7 @@ export default function UsersPage() {
   }
 
   if (loading) return <div className="flex justify-center py-20"><LoadingSpinner size="lg" /></div>
+  if (!isAdmin(getStoredUser())) return <AccessDenied />
 
   return (
     <div>

@@ -5,6 +5,8 @@ import type { Language, RelationshipType, Product } from '@/types'
 import PageHeader from '@/components/ui/PageHeader'
 import Badge from '@/components/ui/Badge'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import AccessDenied from '@/components/ui/AccessDenied'
+import { getStoredUser, isAdmin } from '@/lib/auth'
 
 export default function RegistriesPage() {
   const [languages, setLanguages] = useState<Language[]>([])
@@ -13,7 +15,10 @@ export default function RegistriesPage() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'languages' | 'reltypes' | 'products'>('languages')
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    if (!isAdmin(getStoredUser())) { setLoading(false); return }
+    load()
+  }, [])
 
   async function load() {
     try {
@@ -27,6 +32,7 @@ export default function RegistriesPage() {
   }
 
   if (loading) return <div className="flex justify-center py-20"><LoadingSpinner size="lg" /></div>
+  if (!isAdmin(getStoredUser())) return <AccessDenied />
 
   return (
     <div>
