@@ -14,6 +14,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
   const [schema, setSchema] = useState<SchemaPosition[]>([])
   const [items, setItems] = useState<ConnectDataItem[]>([])
   const [cores, setCores] = useState<Core[]>([])
+  const [itemValueMap, setItemValueMap] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'schema' | 'data' | 'upload'>('schema')
   const [uploadFile, setUploadFile] = useState<File | null>(null)
@@ -32,6 +33,20 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
         api.get('/cores'),
       ])
       setConnect(c.data); setSchema(s.data); setItems(i.data); setCores(cr.data)
+
+      // Fetch English values for all cores referenced in schema
+      const schemaPositions: SchemaPosition[] = s.data
+      const coreIds = [...new Set(schemaPositions.map((p: SchemaPosition) => p.core_id))]
+      const coreItemResults = await Promise.all(
+        coreIds.map((cid: string) => api.get(`/cores/${cid}/items`).catch(() => ({ data: [] })))
+      )
+      const valueMap: Record<string, string> = {}
+      coreItemResults.forEach(r => {
+        r.data.forEach((item: { id: string; english_value: string }) => {
+          valueMap[item.id] = item.english_value
+        })
+      })
+      setItemValueMap(valueMap)
     } finally { setLoading(false) }
   }
 
@@ -135,9 +150,10 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                     <td className="px-4 py-2 text-slate-400">{idx + 1}</td>
                     {schema.map(p => {
                       const pos = item.positions.find(ip => ip.position_number === p.position_number)
+                      const label = pos ? (itemValueMap[pos.core_data_item_id] || pos.core_data_item_id.slice(0, 8) + '…') : '—'
                       return (
-                        <td key={p.id} className="px-4 py-2 text-slate-700 font-mono text-xs">
-                          {pos?.core_data_item_id.slice(0, 8) || '—'}…
+                        <td key={p.id} className="px-4 py-2 text-slate-800 text-sm">
+                          {label}
                         </td>
                       )
                     })}

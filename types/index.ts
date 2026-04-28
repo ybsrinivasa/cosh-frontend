@@ -4,7 +4,6 @@ export type Role = 'ADMIN' | 'DESIGNER' | 'STOCKER' | 'REVIEWER'
 export type Status = 'ACTIVE' | 'INACTIVE'
 
 export interface UserRoleEntry {
-  id: string
   role: Role
   status: Status
 }

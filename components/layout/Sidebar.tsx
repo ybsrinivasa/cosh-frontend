@@ -71,7 +71,7 @@ export default function Sidebar() {
             <p className="text-slate-400 text-xs truncate">{user.email}</p>
             <div className="flex flex-wrap gap-1 mt-1">
               {user.roles.filter(r => r.status === 'ACTIVE').map(r => (
-                <span key={r.id} className="text-xs bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded">
+                <span key={r.role} className="text-xs bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded">
                   {r.role}
                 </span>
               ))}
