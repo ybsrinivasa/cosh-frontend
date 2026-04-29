@@ -12,45 +12,61 @@ import Combobox, { ComboboxItem } from '@/components/ui/Combobox'
 
 interface StockerUser { id: string; name: string; email: string }
 
+// Schema builder position — tracks what type + which entity is selected
+interface SchemaBuilderPos {
+  node_type: 'CORE' | 'CONNECT'
+  core_id: string
+  connect_ref_id: string
+  relationship_type_to_next: string
+}
+
+function positionKey(pos: SchemaPosition): string {
+  return pos.node_type === 'CONNECT' ? (pos.connect_ref_id || '') : (pos.core_id || '')
+}
+
+function positionLabel(pos: SchemaPosition): string {
+  if (pos.node_type === 'CONNECT') return pos.connect_ref_name || pos.connect_ref_id || `Position ${pos.position_number}`
+  return pos.core_name || pos.core_id || `Position ${pos.position_number}`
+}
+
 export default function ConnectDetailPage({ params }: { params: Promise<{ connectId: string }> }) {
   const { connectId } = use(params)
 
-  // Core data
   const [connect, setConnect] = useState<Connect | null>(null)
   const [schema, setSchema] = useState<SchemaPosition[]>([])
   const [items, setItems] = useState<ConnectDataItem[]>([])
   const [cores, setCores] = useState<Core[]>([])
+  const [allConnects, setAllConnects] = useState<Connect[]>([])
   const [relTypes, setRelTypes] = useState<RelationshipType[]>([])
   const [stockers, setStockers] = useState<StockerUser[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'schema' | 'data' | 'upload' | 'settings'>('schema')
 
-  // Core items for dropdowns — loaded lazily when Data tab opens
-  const [coreItemsMap, setCoreItemsMap] = useState<Record<string, ComboboxItem[]>>({})
-  const [coreItemsLoading, setCoreItemsLoading] = useState(false)
-  const coreItemsFetchedRef = useRef(false)  // ref guard prevents loop
+  // Combobox items — keyed by positionKey (core_id or connect_ref_id)
+  const [posItemsMap, setPosItemsMap] = useState<Record<string, ComboboxItem[]>>({})
+  const [posItemsLoading, setPosItemsLoading] = useState(false)
+  const posItemsFetchedRef = useRef(false)
 
-  // Connect rename state
+  // Connect rename
   const [editingConnectName, setEditingConnectName] = useState(false)
   const [editedConnectName, setEditedConnectName] = useState('')
 
-  // Manual entry form state — also used for editing existing rows
-  // selection: position_number → core_data_item_id
+  // Data entry form
   const [selection, setSelection] = useState<Record<number, string>>({})
-  const [editingRowId, setEditingRowId] = useState<string | null>(null)  // null = new row, id = editing existing
+  const [editingRowId, setEditingRowId] = useState<string | null>(null)
   const [savingRow, setSavingRow] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [saveSuccess, setSaveSuccess] = useState('')
 
-  // Schema builder state
-  const [positions, setPositions] = useState<{ core_id: string; relationship_type_to_next: string }[]>([
-    { core_id: '', relationship_type_to_next: '' },
-    { core_id: '', relationship_type_to_next: '' },
+  // Schema builder
+  const [positions, setPositions] = useState<SchemaBuilderPos[]>([
+    { node_type: 'CORE', core_id: '', connect_ref_id: '', relationship_type_to_next: '' },
+    { node_type: 'CORE', core_id: '', connect_ref_id: '', relationship_type_to_next: '' },
   ])
   const [savingSchema, setSavingSchema] = useState(false)
   const [schemaError, setSchemaError] = useState('')
 
-  // Excel upload state
+  // Excel upload
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploadResult, setUploadResult] = useState('')
   const [uploadErrors, setUploadErrors] = useState('')
@@ -61,18 +77,19 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
   const [savingAssignment, setSavingAssignment] = useState(false)
   const [assignmentMsg, setAssignmentMsg] = useState('')
 
-  // Value lookup map for displaying English values in table
-  const [itemValueMap, setItemValueMap] = useState<Record<string, string>>({})
+  // Value display map: value_id → label (for rendering table cells)
+  const [valueMap, setValueMap] = useState<Record<string, string>>({})
 
   useEffect(() => { load() }, [connectId])
 
   async function load() {
     try {
-      const [c, s, i, cr, rt, st] = await Promise.all([
+      const [c, s, i, cr, ct, rt, st] = await Promise.all([
         api.get(`/connects/${connectId}`),
         api.get(`/connects/${connectId}/schema`),
         api.get(`/connects/${connectId}/items`),
         api.get('/cores'),
+        api.get('/connects'),
         api.get('/admin/registries/relationship-types'),
         api.get('/admin/users/by-role/STOCKER').catch(() => ({ data: [] })),
       ])
@@ -80,82 +97,96 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
       setSchema(s.data)
       setItems(i.data)
       setCores(cr.data)
+      setAllConnects(ct.data.filter((con: Connect) => con.id !== connectId))
       setRelTypes(rt.data)
       setStockers(st.data)
       setAssignedStockerId(c.data.assigned_stocker_id || '')
 
-      // Build initial value map from already-loaded core items
-      const schemaCoreIds = [...new Set((s.data as SchemaPosition[]).map(p => p.core_id))]
-      const results = await Promise.all(
-        schemaCoreIds.map(cid => api.get(`/cores/${cid}/items`).catch(() => ({ data: [] })))
+      // Build initial value map: load Core items for Core-type schema positions
+      const schema: SchemaPosition[] = s.data
+      const corePositions = schema.filter(p => p.node_type !== 'CONNECT' && p.core_id)
+      const uniqueCoreIds = [...new Set(corePositions.map(p => p.core_id!))]
+      const coreResults = await Promise.all(
+        uniqueCoreIds.map(cid => api.get(`/cores/${cid}/items`).catch(() => ({ data: [] })))
       )
       const vm: Record<string, string> = {}
-      results.forEach(r => r.data.forEach((item: { id: string; english_value: string }) => {
+      coreResults.forEach(r => r.data.forEach((item: { id: string; english_value: string }) => {
         vm[item.id] = item.english_value
       }))
-      setItemValueMap(vm)
+
+      // Also load Connect data rows for Connect-type schema positions
+      const connectPositions = schema.filter(p => p.node_type === 'CONNECT' && p.connect_ref_id)
+      const uniqueConnectRefIds = [...new Set(connectPositions.map(p => p.connect_ref_id!))]
+      const connectResults = await Promise.all(
+        uniqueConnectRefIds.map(cid => api.get(`/connects/${cid}/data-rows`).catch(() => ({ data: [] })))
+      )
+      connectResults.forEach(r => r.data.forEach((row: { id: string; label: string }) => {
+        vm[row.id] = row.label
+      }))
+
+      setValueMap(vm)
     } finally {
       setLoading(false)
     }
   }
 
-  const loadCoreItems = useCallback(async () => {
-    // ref guard: runs exactly once per schema version, even if component re-renders
-    if (coreItemsFetchedRef.current || schema.length === 0) return
-    coreItemsFetchedRef.current = true
-    setCoreItemsLoading(true)
+  // Load Combobox items for the data entry form (lazily when Data tab opens)
+  const loadPosItems = useCallback(async () => {
+    if (posItemsFetchedRef.current || schema.length === 0) return
+    posItemsFetchedRef.current = true
+    setPosItemsLoading(true)
     try {
       const map: Record<string, ComboboxItem[]> = {}
-      const valueUpdates: Record<string, string> = {}
-      await Promise.all(
-        schema.map(async pos => {
+      const vmUpdates: Record<string, string> = {}
+
+      await Promise.all(schema.map(async pos => {
+        const key = positionKey(pos)
+        if (!key) return
+
+        if (pos.node_type === 'CONNECT') {
+          const { data } = await api.get(`/connects/${pos.connect_ref_id}/data-rows`)
+          map[key] = data.map((row: { id: string; label: string }) => ({ id: row.id, label: row.label }))
+          data.forEach((row: { id: string; label: string }) => { vmUpdates[row.id] = row.label })
+        } else {
           const { data } = await api.get(`/cores/${pos.core_id}/items?status_filter=ACTIVE`)
-          map[pos.core_id] = data.map((item: { id: string; english_value: string }) => ({
-            id: item.id,
-            label: item.english_value,
-          }))
-          data.forEach((item: { id: string; english_value: string }) => {
-            valueUpdates[item.id] = item.english_value
-          })
-        })
-      )
-      setCoreItemsMap(map)
-      setItemValueMap(prev => ({ ...prev, ...valueUpdates }))
+          map[key] = data.map((item: { id: string; english_value: string }) => ({ id: item.id, label: item.english_value }))
+          data.forEach((item: { id: string; english_value: string }) => { vmUpdates[item.id] = item.english_value })
+        }
+      }))
+
+      setPosItemsMap(map)
+      setValueMap(prev => ({ ...prev, ...vmUpdates }))
     } catch {
-      // If fetch fails, allow retry on next tab switch
-      coreItemsFetchedRef.current = false
+      posItemsFetchedRef.current = false
     } finally {
-      setCoreItemsLoading(false)
+      setPosItemsLoading(false)
     }
-  }, [schema])  // only recreate when schema changes
+  }, [schema])
 
-  // Load core items when Data tab opens
   useEffect(() => {
-    if (tab === 'data') loadCoreItems()
-  }, [tab, loadCoreItems])
+    if (tab === 'data') loadPosItems()
+  }, [tab, loadPosItems])
 
-  const coreMap = Object.fromEntries(cores.map(c => [c.id, c.name]))
   const activeCores = cores.filter(c => c.status === 'ACTIVE')
+  const activeConnects = allConnects.filter(c => c.status === 'ACTIVE')
 
-  // ── Manual row entry ────────────────────────────────────────────────────────
+  // ── Data entry helpers ────────────────────────────────────────────────────
 
   function setPos(posNum: number, itemId: string) {
     setSelection(prev => ({ ...prev, [posNum]: itemId }))
-    setSaveError('')
-    setSaveSuccess('')
+    setSaveError(''); setSaveSuccess('')
   }
 
   function clearForm() {
-    setSelection({})
-    setSaveError('')
-    setSaveSuccess('')
-    setEditingRowId(null)
+    setSelection({}); setSaveError(''); setSaveSuccess(''); setEditingRowId(null)
+  }
+
+  function getDataPositionValueId(p: { core_data_item_id: string | null; connect_data_item_ref_id: string | null }): string {
+    return p.connect_data_item_ref_id || p.core_data_item_id || ''
   }
 
   function buildFingerprint(sel: Record<number, string>): string {
-    return schema
-      .map(p => `${p.position_number}:${sel[p.position_number] || ''}`)
-      .join('|')
+    return schema.map(p => `${p.position_number}:${sel[p.position_number] || ''}`).join('|')
   }
 
   async function toggleRowStatus(cdiId: string, currentStatus: string) {
@@ -176,64 +207,52 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
   }
 
   async function saveRow() {
-    setSaveError('')
-    setSaveSuccess('')
-
-    // Validate all positions selected
+    setSaveError(''); setSaveSuccess('')
     for (const pos of schema) {
       if (!selection[pos.position_number]) {
-        setSaveError(`Please select a value for "${pos.core_name || `Position ${pos.position_number}`}"`)
+        setSaveError(`Please select a value for "${positionLabel(pos)}"`)
         return
       }
     }
 
-    // Client-side duplicate check (exclude the row being edited)
     const newFp = buildFingerprint(selection)
     const isDuplicate = items.some(item => {
-      if (editingRowId && item.id === editingRowId) return false  // skip self when editing
+      if (editingRowId && item.id === editingRowId) return false
       const fp = item.positions
-        .slice()
-        .sort((a, b) => a.position_number - b.position_number)
-        .map(p => `${p.position_number}:${p.core_data_item_id}`)
+        .slice().sort((a, b) => a.position_number - b.position_number)
+        .map(p => `${p.position_number}:${getDataPositionValueId(p)}`)
         .join('|')
       return fp === newFp
     })
-    if (isDuplicate) {
-      setSaveError('This combination already exists in this Connect')
-      return
-    }
+    if (isDuplicate) { setSaveError('This combination already exists in this Connect'); return }
 
     setSavingRow(true)
     try {
-      const payload = schema.map(pos => ({
-        position_number: pos.position_number,
-        core_data_item_id: selection[pos.position_number],
-      }))
+      const payload = schema.map(pos => {
+        const val = selection[pos.position_number]
+        return pos.node_type === 'CONNECT'
+          ? { position_number: pos.position_number, connect_data_item_ref_id: val }
+          : { position_number: pos.position_number, core_data_item_id: val }
+      })
       if (editingRowId) {
-        // Update existing row
         await api.put(`/connects/${connectId}/items/${editingRowId}`, payload)
-        setSaveSuccess('Row updated')
-        setEditingRowId(null)
+        setSaveSuccess('Row updated'); setEditingRowId(null)
       } else {
-        // Create new row
         const { data } = await api.post(`/connects/${connectId}/items`, payload)
         setItems(prev => [...prev, data])
         setSaveSuccess('Row saved')
       }
-      clearForm()
-      load()
+      clearForm(); load()
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } }
       setSaveError(err.response?.data?.detail || 'Failed to save row')
-    } finally {
-      setSavingRow(false)
-    }
+    } finally { setSavingRow(false) }
   }
 
-  // ── Schema builder ─────────────────────────────────────────────────────────
+  // ── Schema builder helpers ────────────────────────────────────────────────
 
   function addPosition() {
-    setPositions(prev => [...prev, { core_id: '', relationship_type_to_next: '' }])
+    setPositions(prev => [...prev, { node_type: 'CORE', core_id: '', connect_ref_id: '', relationship_type_to_next: '' }])
   }
 
   function removePosition(idx: number) {
@@ -241,25 +260,36 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
     setPositions(prev => prev.filter((_, i) => i !== idx))
   }
 
-  function updateSchemaPosition(idx: number, field: 'core_id' | 'relationship_type_to_next', value: string) {
+  function updatePos(idx: number, field: keyof SchemaBuilderPos, value: string) {
     setPositions(prev => prev.map((p, i) => i === idx ? { ...p, [field]: value } : p))
+  }
+
+  function switchNodeType(idx: number, type: 'CORE' | 'CONNECT') {
+    setPositions(prev => prev.map((p, i) => i === idx
+      ? { ...p, node_type: type, core_id: '', connect_ref_id: '' }
+      : p
+    ))
   }
 
   async function saveSchema() {
     setSchemaError('')
     for (let i = 0; i < positions.length; i++) {
-      if (!positions[i].core_id) {
-        setSchemaError(`Please select a Core for Position ${i + 1}`)
-        return
+      const p = positions[i]
+      if (p.node_type === 'CORE' && !p.core_id) {
+        setSchemaError(`Please select a Core for Position ${i + 1}`); return
       }
-      if (i < positions.length - 1 && !positions[i].relationship_type_to_next) {
-        setSchemaError(`Please select a relationship type between Position ${i + 1} and Position ${i + 2}`)
-        return
+      if (p.node_type === 'CONNECT' && !p.connect_ref_id) {
+        setSchemaError(`Please select a Connect for Position ${i + 1}`); return
+      }
+      if (i < positions.length - 1 && !p.relationship_type_to_next) {
+        setSchemaError(`Please select a relationship type between Position ${i + 1} and Position ${i + 2}`); return
       }
     }
     const payload = positions.map((p, i) => ({
       position_number: i + 1,
-      core_id: p.core_id,
+      node_type: p.node_type,
+      core_id: p.node_type === 'CORE' ? p.core_id : null,
+      connect_ref_id: p.node_type === 'CONNECT' ? p.connect_ref_id : null,
       relationship_type_to_next: i < positions.length - 1 ? p.relationship_type_to_next : null,
     }))
     setSavingSchema(true)
@@ -269,12 +299,10 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } }
       setSchemaError(err.response?.data?.detail || 'Failed to save schema')
-    } finally {
-      setSavingSchema(false)
-    }
+    } finally { setSavingSchema(false) }
   }
 
-  // ── Excel upload ──────────────────────────────────────────────────────────
+  // ── Excel upload ─────────────────────────────────────────────────────────
 
   async function uploadExcel() {
     if (!uploadFile) return
@@ -290,35 +318,29 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
       if (data.unresolved) msg += ` | Unresolved: ${data.unresolved}`
       setUploadResult(msg)
       if (data.unresolved_details?.length) {
-        setUploadErrors(
-          data.unresolved_details
-            .map((d: { row: number; errors: string[] }) => `Row ${d.row}: ${d.errors.join(', ')}`)
-            .join('\n')
-        )
+        setUploadErrors(data.unresolved_details
+          .map((d: { row: number; errors: string[] }) => `Row ${d.row}: ${d.errors.join(', ')}`)
+          .join('\n'))
       }
       load()
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } }
       setUploadResult(`✗ ${err.response?.data?.detail || 'Upload failed'}`)
-    } finally {
-      setUploading(false)
-    }
+    } finally { setUploading(false) }
   }
 
-  // ── Stocker assignment ───────────────────────────────────────────────────
+  // ── Stocker assignment ────────────────────────────────────────────────────
 
   async function saveAssignment() {
     setSavingAssignment(true); setAssignmentMsg('')
     try {
       await api.put(`/connects/${connectId}`, { assigned_stocker_id: assignedStockerId || null })
-      setAssignmentMsg('✓ Saved')
-      load()
-    } catch {
-      setAssignmentMsg('✗ Failed to save')
-    } finally { setSavingAssignment(false) }
+      setAssignmentMsg('✓ Saved'); load()
+    } catch { setAssignmentMsg('✗ Failed to save') }
+    finally { setSavingAssignment(false) }
   }
 
-  // ──────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────
 
   if (loading) return <div className="flex justify-center py-20"><LoadingSpinner size="lg" /></div>
   if (!connect) return <p className="text-slate-500">Connect not found</p>
@@ -352,15 +374,15 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
         )}
       </div>
 
-      {/* Tabs — Settings hidden for Stockers */}
+      {/* Tabs */}
       <div className="flex gap-1 mb-6 border-b border-slate-200">
         {(['schema', 'data', 'upload', 'settings'] as const)
           .filter(t => !(t === 'settings' && connect.assigned_stocker_id === getStoredUser()?.id))
           .map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${tab === t ? 'border-b-2 border-teal-600 text-teal-600' : 'text-slate-500 hover:text-slate-700'}`}>
-            {t === 'schema' ? 'Schema' : t === 'data' ? `Data (${items.length})` : t === 'upload' ? 'Excel Upload' : 'Settings'}
-          </button>
+            <button key={t} onClick={() => setTab(t)}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${tab === t ? 'border-b-2 border-teal-600 text-teal-600' : 'text-slate-500 hover:text-slate-700'}`}>
+              {t === 'schema' ? 'Schema' : t === 'data' ? `Data (${items.length})` : t === 'upload' ? 'Excel Upload' : 'Settings'}
+            </button>
           ))}
       </div>
 
@@ -372,9 +394,12 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
               <div className="flex items-center flex-wrap gap-0 mb-4">
                 {schema.map((pos, idx) => (
                   <div key={pos.id} className="flex items-center">
-                    <div className="bg-white border-2 border-slate-200 rounded-xl px-5 py-3 text-center min-w-32">
-                      <p className="text-xs text-slate-400 mb-1">Position {pos.position_number}</p>
-                      <p className="text-sm font-semibold text-slate-800">{pos.core_name || pos.core_id}</p>
+                    <div className={`border-2 rounded-xl px-5 py-3 text-center min-w-32 ${pos.node_type === 'CONNECT' ? 'bg-violet-50 border-violet-200' : 'bg-white border-slate-200'}`}>
+                      <p className="text-xs text-slate-400 mb-1">
+                        Position {pos.position_number}
+                        {pos.node_type === 'CONNECT' && <span className="ml-1 text-violet-500 font-medium">· Connect</span>}
+                      </p>
+                      <p className="text-sm font-semibold text-slate-800">{positionLabel(pos)}</p>
                     </div>
                     {idx < schema.length - 1 && (
                       <div className="flex flex-col items-center mx-3">
@@ -396,29 +421,54 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
             <div className="max-w-2xl">
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5 text-sm text-blue-800">
                 <p className="font-medium mb-1">Define the schema first</p>
-                <p>A schema defines which Cores appear at each position and how they are connected. Minimum 2 positions. Locks permanently once the first data row is added.</p>
+                <p>Each position can reference a <strong>Core</strong> (a named list of items) or another <strong>Connect</strong> (an existing hyperedge). Minimum 2 positions. Locks once the first data row is added.</p>
               </div>
               <div className="space-y-0">
                 {positions.map((pos, idx) => (
                   <div key={idx}>
-                    <div className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl px-4 py-3">
-                      <div className="w-20 text-xs font-medium text-slate-500 flex-shrink-0">Position {idx + 1}</div>
-                      <select value={pos.core_id} onChange={e => updateSchemaPosition(idx, 'core_id', e.target.value)}
-                        className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
-                        <option value="">Select a Core…</option>
-                        {activeCores.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      </select>
+                    <div className="flex items-start gap-3 bg-white border border-slate-200 rounded-xl px-4 py-3">
+                      <div className="w-20 text-xs font-medium text-slate-500 flex-shrink-0 pt-2">Position {idx + 1}</div>
+
+                      {/* Node type toggle */}
+                      <div className="flex flex-col gap-2 flex-1">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => switchNodeType(idx, 'CORE')}
+                            className={`px-3 py-1 text-xs rounded-full border font-medium transition-colors ${pos.node_type === 'CORE' ? 'bg-teal-600 text-white border-teal-600' : 'border-slate-300 text-slate-500 hover:border-slate-400'}`}
+                          >Core</button>
+                          <button
+                            onClick={() => switchNodeType(idx, 'CONNECT')}
+                            className={`px-3 py-1 text-xs rounded-full border font-medium transition-colors ${pos.node_type === 'CONNECT' ? 'bg-violet-600 text-white border-violet-600' : 'border-slate-300 text-slate-500 hover:border-slate-400'}`}
+                          >Connect</button>
+                        </div>
+
+                        {pos.node_type === 'CORE' ? (
+                          <select value={pos.core_id} onChange={e => updatePos(idx, 'core_id', e.target.value)}
+                            className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                            <option value="">Select a Core…</option>
+                            {activeCores.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                        ) : (
+                          <select value={pos.connect_ref_id} onChange={e => updatePos(idx, 'connect_ref_id', e.target.value)}
+                            className="border border-violet-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 bg-violet-50">
+                            <option value="">Select a Connect…</option>
+                            {activeConnects.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                        )}
+                      </div>
+
                       {positions.length > 2 && (
-                        <button onClick={() => removePosition(idx)} className="text-slate-300 hover:text-red-400 text-lg flex-shrink-0">✕</button>
+                        <button onClick={() => removePosition(idx)} className="text-slate-300 hover:text-red-400 text-lg flex-shrink-0 pt-1">✕</button>
                       )}
                     </div>
+
                     {idx < positions.length - 1 && (
                       <div className="flex items-center gap-3 py-2 pl-24 pr-10">
                         <div className="flex flex-col items-start">
                           <div className="w-px h-2 bg-slate-300 ml-4" />
                           <div className="flex items-center gap-2">
                             <span className="text-slate-400">↓</span>
-                            <select value={pos.relationship_type_to_next} onChange={e => updateSchemaPosition(idx, 'relationship_type_to_next', e.target.value)}
+                            <select value={pos.relationship_type_to_next} onChange={e => updatePos(idx, 'relationship_type_to_next', e.target.value)}
                               className="flex-1 border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-teal-50 text-teal-800 font-mono">
                               <option value="">Select relationship type…</option>
                               {relTypes.map(rt => <option key={rt.id} value={rt.label}>{rt.label} — {rt.display_name}</option>)}
@@ -453,84 +503,68 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
             </div>
           ) : (
             <>
-              {/* Read-only banner when Connect is assigned to another user */}
               {connect.assigned_stocker_id && connect.assigned_stocker_id !== getStoredUser()?.id && (
                 <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
                   🔒 <span>This Connect is assigned to a Stocker for data entry. You can view the data but cannot add rows.</span>
                 </div>
               )}
 
-              {/* ── Manual entry form — hidden when read-only ────────────────── */}
               {(!connect.assigned_stocker_id || connect.assigned_stocker_id === getStoredUser()?.id) && (
-              <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6">
-                <h3 className="text-sm font-semibold text-slate-800 mb-4">
-                  {editingRowId ? '✎ Edit row' : 'Add new row'}
-                </h3>
-
-                <div className="space-y-1 max-w-xl">
-                  {schema.map((pos, idx) => (
-                    <div key={pos.id}>
-                      {/* Position row */}
-                      <div className="flex items-center gap-3">
-                        <div className="w-36 flex-shrink-0">
-                          <p className="text-xs font-medium text-slate-500 truncate">
-                            {pos.core_name || `Position ${pos.position_number}`}
-                          </p>
-                        </div>
-                        <div className="flex-1">
-                          <Combobox
-                            items={coreItemsMap[pos.core_id] || []}
-                            value={selection[pos.position_number] || ''}
-                            onChange={id => setPos(pos.position_number, id)}
-                            placeholder={coreItemsLoading ? 'Loading…' : `Search ${pos.core_name || ''}…`}
-                            loading={coreItemsLoading}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Relationship type between positions */}
-                      {idx < schema.length - 1 && (
-                        <div className="flex items-center gap-2 py-1 pl-36 ml-3">
-                          <div className="w-px h-3 bg-slate-200" />
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-slate-300 text-sm">↓</span>
-                            <span className="text-xs font-mono text-teal-600 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded">
-                              {pos.relationship_type_to_next}
-                            </span>
-                            <span className="text-slate-300 text-sm">↓</span>
+                <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6">
+                  <h3 className="text-sm font-semibold text-slate-800 mb-4">
+                    {editingRowId ? '✎ Edit row' : 'Add new row'}
+                  </h3>
+                  <div className="space-y-1 max-w-xl">
+                    {schema.map((pos, idx) => (
+                      <div key={pos.id}>
+                        <div className="flex items-center gap-3">
+                          <div className="w-36 flex-shrink-0">
+                            <p className="text-xs font-medium text-slate-500 truncate">{positionLabel(pos)}</p>
+                            {pos.node_type === 'CONNECT' && (
+                              <p className="text-xs text-violet-400">Connect</p>
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <Combobox
+                              items={posItemsMap[positionKey(pos)] || []}
+                              value={selection[pos.position_number] || ''}
+                              onChange={id => setPos(pos.position_number, id)}
+                              placeholder={posItemsLoading ? 'Loading…' : `Search ${positionLabel(pos)}…`}
+                              loading={posItemsLoading}
+                            />
                           </div>
                         </div>
-                      )}
-                    </div>
-                  ))}
+                        {idx < schema.length - 1 && (
+                          <div className="flex items-center gap-2 py-1 pl-36 ml-3">
+                            <div className="w-px h-3 bg-slate-200" />
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-slate-300 text-sm">↓</span>
+                              <span className="text-xs font-mono text-teal-600 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded">
+                                {pos.relationship_type_to_next}
+                              </span>
+                              <span className="text-slate-300 text-sm">↓</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-3 mt-5">
+                    <button onClick={saveRow} disabled={savingRow}
+                      className="px-5 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 font-medium flex items-center gap-2">
+                      {savingRow && <LoadingSpinner size="sm" />}
+                      {editingRowId ? 'Update Row' : 'Save Row'}
+                    </button>
+                    <button onClick={clearForm} className="px-4 py-2 text-sm text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg hover:bg-slate-50">
+                      Clear
+                    </button>
+                  </div>
+                  {saveError && <p className="mt-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{saveError}</p>}
+                  {saveSuccess && <p className="mt-3 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">✓ {saveSuccess}</p>}
                 </div>
+              )}
 
-                {/* Actions */}
-                <div className="flex items-center gap-3 mt-5">
-                  <button onClick={saveRow} disabled={savingRow}
-                    className="px-5 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 font-medium flex items-center gap-2">
-                    {savingRow && <LoadingSpinner size="sm" />}
-                    {editingRowId ? 'Update Row' : 'Save Row'}
-                  </button>
-                  <button onClick={clearForm} className="px-4 py-2 text-sm text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg hover:bg-slate-50">
-                    Clear
-                  </button>
-                </div>
-
-                {saveError && (
-                  <p className="mt-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                    {saveError}
-                  </p>
-                )}
-                {saveSuccess && (
-                  <p className="mt-3 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-                    ✓ {saveSuccess}
-                  </p>
-                )}
-              </div>
-              )}  {/* end conditional entry form */}
-
-              {/* ── Data table ───────────────────────────────────────────────── */}
+              {/* Data table */}
               <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
                 <div className="px-5 py-3 border-b border-slate-100 bg-slate-50">
                   <p className="text-sm font-medium text-slate-700">
@@ -547,7 +581,8 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                           <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 w-10">#</th>
                           {schema.map(p => (
                             <th key={p.id} className="text-left px-4 py-2.5 text-xs font-medium text-slate-500">
-                              {p.core_name || `Position ${p.position_number}`}
+                              {positionLabel(p)}
+                              {p.node_type === 'CONNECT' && <span className="ml-1 text-violet-400">↗</span>}
                             </th>
                           ))}
                           <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500">Entered by</th>
@@ -560,18 +595,17 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                             <td className="px-4 py-3 text-slate-400 text-xs">{idx + 1}</td>
                             {schema.map(p => {
                               const pos = item.positions.find(ip => ip.position_number === p.position_number)
-                              const label = pos
-                                ? (itemValueMap[pos.core_data_item_id] || pos.core_data_item_id.slice(0, 8) + '…')
+                              const valueId = pos ? getDataPositionValueId(pos) : null
+                              const label = valueId
+                                ? (valueMap[valueId] || valueId.slice(0, 8) + '…')
                                 : '—'
                               return (
                                 <td key={p.id} className="px-4 py-3 text-slate-800 font-medium">{label}</td>
                               )
                             })}
                             <td className="px-4 py-3">
-                              <div>
-                                <p className="text-sm text-slate-700">{item.created_by_name || '—'}</p>
-                                <p className="text-xs text-slate-400">{formatDate(item.created_at)}</p>
-                              </div>
+                              <p className="text-sm text-slate-700">{item.created_by_name || '—'}</p>
+                              <p className="text-xs text-slate-400">{formatDate(item.created_at)}</p>
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2">
@@ -582,15 +616,13 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                                       <button
                                         onClick={() => {
                                           const preselect: Record<number, string> = {}
-                                          item.positions.forEach(p => { preselect[p.position_number] = p.core_data_item_id })
+                                          item.positions.forEach(p => { preselect[p.position_number] = getDataPositionValueId(p) })
                                           setSelection(preselect)
                                           setEditingRowId(item.id)
                                           setSaveError(''); setSaveSuccess('')
                                         }}
                                         className="text-xs text-teal-600 hover:text-teal-800 border border-teal-200 px-2 py-0.5 rounded hover:bg-teal-50 transition-colors"
-                                      >
-                                        Edit
-                                      </button>
+                                      >Edit</button>
                                     )}
                                     <button
                                       onClick={() => toggleRowStatus(item.id, item.status)}
@@ -622,12 +654,17 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
               ⚠️ Define the schema first before uploading data.
             </div>
           )}
+          {schema.some(p => p.node_type === 'CONNECT') && (
+            <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 mb-4 text-sm text-violet-800">
+              ℹ️ This Connect has Connect-type positions. Excel upload only supports Core-type positions — use manual entry for rows involving Connect references.
+            </div>
+          )}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 text-sm text-blue-800">
             <p className="font-medium mb-1">Excel format</p>
-            <p>One column per schema position, header must match Core name exactly. Values must match English values stored in Cosh.</p>
-            {schema.length > 0 && (
+            <p>One column per Core-type schema position, header must match Core name exactly.</p>
+            {schema.filter(p => p.node_type !== 'CONNECT').length > 0 && (
               <p className="mt-2 font-mono text-xs bg-blue-100 px-2 py-1 rounded">
-                Expected columns: {schema.map(p => p.core_name || `Position ${p.position_number}`).join(' | ')}
+                Expected columns: {schema.filter(p => p.node_type !== 'CONNECT').map(p => positionLabel(p)).join(' | ')}
               </p>
             )}
             <p className="mt-1.5 text-xs text-blue-600">Duplicate rows are automatically skipped.</p>
@@ -663,7 +700,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
 
       {/* ── Settings tab ────────────────────────────────────────────────────── */}
       {tab === 'settings' && (
-        <div className="max-w-lg">
+        <div className="max-w-lg space-y-4">
           <div className="bg-white border border-slate-200 rounded-xl p-5">
             <h3 className="font-medium text-slate-800 mb-1">Assigned Stocker</h3>
             <p className="text-sm text-slate-500 mb-4">The Stocker responsible for uploading data to this Connect.</p>
@@ -686,12 +723,9 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
             )}
           </div>
 
-          {/* Connect status */}
           <div className="bg-white border border-slate-200 rounded-xl p-5">
             <h3 className="font-medium text-slate-800 mb-1">Connect Status</h3>
-            <p className="text-sm text-slate-500 mb-4">
-              Inactivating a Connect inactivates all its data rows and their Neo4J relationships.
-            </p>
+            <p className="text-sm text-slate-500 mb-4">Inactivating a Connect inactivates all its data rows and their Neo4J relationships.</p>
             <div className="flex items-center gap-3">
               <Badge label={connect.status} variant={connect.status} />
               <button

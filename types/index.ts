@@ -105,12 +105,17 @@ export interface Connect {
   created_at: string
 }
 
+export type NodeType = 'CORE' | 'CONNECT'
+
 export interface SchemaPosition {
   id: string
   connect_id: string
   position_number: number
-  core_id: string
+  node_type: NodeType
+  core_id: string | null
   core_name: string | null
+  connect_ref_id: string | null
+  connect_ref_name: string | null
   relationship_type_to_next: string | null
 }
 
@@ -118,7 +123,8 @@ export interface ConnectDataPosition {
   id: string
   connect_data_item_id: string
   position_number: number
-  core_data_item_id: string
+  core_data_item_id: string | null
+  connect_data_item_ref_id: string | null
 }
 
 export interface ConnectDataItem {
