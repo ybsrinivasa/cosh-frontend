@@ -107,10 +107,16 @@ export default function Sidebar() {
         )}
       </nav>
 
-      {/* User footer */}
-      <div className="px-4 py-4 border-t border-green-900/60">
+      {/* User footer — sign out first so it's never buried at screen edge */}
+      <div className="px-4 pt-3 pb-6 border-t border-green-900/60">
+        <button
+          onClick={logout}
+          className="w-full text-left text-xs text-green-600 hover:text-green-300 transition-colors mb-3"
+        >
+          Sign out →
+        </button>
         {user && (
-          <div className="mb-3">
+          <div>
             <p className="text-green-100 text-sm font-medium truncate">{user.name || user.email}</p>
             <p className="text-green-600 text-xs truncate">{user.email}</p>
             <div className="flex flex-wrap gap-1 mt-1.5">
@@ -123,12 +129,6 @@ export default function Sidebar() {
             </div>
           </div>
         )}
-        <button
-          onClick={logout}
-          className="w-full text-left text-xs text-green-600 hover:text-green-300 transition-colors"
-        >
-          Sign out →
-        </button>
       </div>
     </aside>
   )
