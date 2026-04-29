@@ -28,6 +28,9 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
   const [showAddItem, setShowAddItem] = useState(false)
   const [newValue, setNewValue] = useState('')
   const [newMediaUrl, setNewMediaUrl] = useState('')
+  const [addImageMode, setAddImageMode] = useState<'url' | 'file'>('file')
+  const [newImageFile, setNewImageFile] = useState<File | null>(null)
+  const [newImagePreview, setNewImagePreview] = useState<string>('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [uploadFile, setUploadFile] = useState<File | null>(null)
@@ -64,16 +67,45 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
   const isMedia = core?.core_type === 'MEDIA'
   const canWrite = !core?.assigned_stocker_id || core?.assigned_stocker_id === getStoredUser()?.id
 
+  function clearAddImageModal() {
+    setNewValue(''); setNewMediaUrl(''); setNewImageFile(null)
+    setNewImagePreview(''); setError('')
+  }
+
+  function handleImageFileSelect(file: File | null) {
+    setNewImageFile(file)
+    if (file) {
+      const url = URL.createObjectURL(file)
+      setNewImagePreview(url)
+      // Auto-fill name from filename if empty
+      if (!newValue.trim()) {
+        setNewValue(file.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' '))
+      }
+    } else {
+      setNewImagePreview('')
+    }
+  }
+
   async function addItem() {
-    if (!newValue.trim()) return
-    if (isMedia && !newMediaUrl.trim()) { setError('Image URL is required'); return }
+    if (!newValue.trim()) { setError('Name is required'); return }
     setSaving(true); setError('')
     try {
-      await api.post(`/cores/${coreId}/items`, {
-        english_value: newValue.trim(),
-        ...(isMedia ? { s3_url: newMediaUrl.trim() } : {}),
-      })
-      setNewValue(''); setNewMediaUrl(''); setShowAddItem(false); load()
+      if (isMedia) {
+        if (addImageMode === 'file') {
+          if (!newImageFile) { setError('Please select an image file'); setSaving(false); return }
+          const form = new FormData()
+          form.append('file', newImageFile)
+          await api.post(`/cores/${coreId}/items/upload-image?name=${encodeURIComponent(newValue.trim())}`, form, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          })
+        } else {
+          if (!newMediaUrl.trim()) { setError('Image URL is required'); setSaving(false); return }
+          await api.post(`/cores/${coreId}/items`, { english_value: newValue.trim(), s3_url: newMediaUrl.trim() })
+        }
+      } else {
+        await api.post(`/cores/${coreId}/items`, { english_value: newValue.trim() })
+      }
+      clearAddImageModal(); setShowAddItem(false); load()
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } }
       setError(err.response?.data?.detail || 'Failed to add item')
@@ -506,8 +538,9 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
           ? items.filter(item => item.english_value.toLowerCase().includes(newValue.toLowerCase().trim())).slice(0, 8)
           : []
         const exactMatch = !isMedia && items.find(i => i.english_value.toLowerCase() === newValue.toLowerCase().trim())
+        const previewSrc = addImageMode === 'file' ? newImagePreview : newMediaUrl
         return (
-          <Modal title={isMedia ? 'Add Image' : 'Add Item'} onClose={() => { setShowAddItem(false); setNewValue(''); setNewMediaUrl(''); setError('') }}>
+          <Modal title={isMedia ? 'Add Image' : 'Add Item'} onClose={() => { setShowAddItem(false); clearAddImageModal() }}>
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">{isMedia ? 'Name' : 'English value'}</label>
@@ -519,13 +552,39 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
 
               {isMedia && (
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Image URL (S3)</label>
-                  <input value={newMediaUrl} onChange={e => setNewMediaUrl(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') addItem() }}
-                    placeholder="https://…"
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono text-xs" />
-                  {newMediaUrl && (
-                    <img src={newMediaUrl} alt="preview" className="mt-2 h-24 w-auto rounded-lg object-cover border border-slate-200"
+                  {/* Mode toggle */}
+                  <div className="flex gap-2 mb-3">
+                    <button onClick={() => setAddImageMode('file')}
+                      className={`px-3 py-1.5 text-xs rounded-full border font-medium transition-colors ${addImageMode === 'file' ? 'bg-teal-600 text-white border-teal-600' : 'border-slate-300 text-slate-500 hover:border-slate-400'}`}>
+                      Upload file
+                    </button>
+                    <button onClick={() => setAddImageMode('url')}
+                      className={`px-3 py-1.5 text-xs rounded-full border font-medium transition-colors ${addImageMode === 'url' ? 'bg-teal-600 text-white border-teal-600' : 'border-slate-300 text-slate-500 hover:border-slate-400'}`}>
+                      Paste URL
+                    </button>
+                  </div>
+
+                  {addImageMode === 'file' ? (
+                    <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center">
+                      <input type="file" accept="image/*"
+                        onChange={e => handleImageFileSelect(e.target.files?.[0] || null)}
+                        className="block w-full text-sm text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100" />
+                      {newImageFile && <p className="text-xs text-slate-400 mt-1">{newImageFile.name} · {(newImageFile.size / 1024).toFixed(0)} KB</p>}
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Image URL</label>
+                      <input value={newMediaUrl} onChange={e => setNewMediaUrl(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') addItem() }}
+                        placeholder="https://…"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono text-xs" />
+                    </div>
+                  )}
+
+                  {/* Preview */}
+                  {previewSrc && (
+                    <img src={previewSrc} alt="preview"
+                      className="mt-2 h-32 w-auto rounded-lg object-cover border border-slate-200 mx-auto block"
                       onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
                   )}
                 </div>
@@ -549,9 +608,9 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
               <div className="flex gap-3 pt-1">
                 <button onClick={addItem} disabled={saving || (!isMedia && !!exactMatch)}
                   className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2 font-medium">
-                  {saving && <LoadingSpinner size="sm" />} Save
+                  {saving && <LoadingSpinner size="sm" />} {saving && isMedia && addImageMode === 'file' ? 'Uploading…' : 'Save'}
                 </button>
-                <button onClick={() => { setShowAddItem(false); setNewValue(''); setNewMediaUrl(''); setError('') }}
+                <button onClick={() => { setShowAddItem(false); clearAddImageModal() }}
                   className="px-4 py-2 text-sm text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50">
                   Cancel
                 </button>
