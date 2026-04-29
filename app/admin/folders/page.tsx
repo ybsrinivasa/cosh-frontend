@@ -17,7 +17,7 @@ export default function FoldersPage() {
   const [showCoreModal, setShowCoreModal] = useState(false)
   const [selectedFolder, setSelectedFolder] = useState<string>('')
   const [newFolderName, setNewFolderName] = useState('')
-  const [newCore, setNewCore] = useState({ name: '', folder_id: '', core_type: 'TEXT', description: '', language_mode: 'TRANSLATION' })
+  const [newCore, setNewCore] = useState({ name: '', folder_id: '', core_type: 'TEXT', content_type: 'IMAGE', description: '', language_mode: 'TRANSLATION' })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
@@ -53,7 +53,7 @@ export default function FoldersPage() {
     setSaving(true); setError('')
     try {
       await api.post('/cores', { ...newCore, name: newCore.name.trim() })
-      setNewCore({ name: '', folder_id: '', core_type: 'TEXT', description: '', language_mode: 'TRANSLATION' })
+      setNewCore({ name: '', folder_id: '', core_type: 'TEXT', content_type: 'IMAGE', description: '', language_mode: 'TRANSLATION' })
       setShowCoreModal(false); load()
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } }
@@ -215,14 +215,27 @@ export default function FoldersPage() {
                   <option value="MEDIA">MEDIA</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Language mode</label>
-                <select value={newCore.language_mode} onChange={e => setNewCore({ ...newCore, language_mode: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
-                  <option value="TRANSLATION">Translation</option>
-                  <option value="TRANSLITERATION">Transliteration</option>
-                </select>
-              </div>
+              {newCore.core_type === 'MEDIA' ? (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Content type</label>
+                  <select value={newCore.content_type} onChange={e => setNewCore({ ...newCore, content_type: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                    <option value="IMAGE">Image</option>
+                    <option value="VIDEO">Video</option>
+                    <option value="AUDIO">Audio</option>
+                    <option value="DOCUMENT">Document</option>
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Language mode</label>
+                  <select value={newCore.language_mode} onChange={e => setNewCore({ ...newCore, language_mode: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                    <option value="TRANSLATION">Translation</option>
+                    <option value="TRANSLITERATION">Transliteration</option>
+                  </select>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Description (optional)</label>
