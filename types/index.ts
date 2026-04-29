@@ -109,6 +109,7 @@ export interface SchemaPosition {
   connect_id: string
   position_number: number
   core_id: string
+  core_name: string | null
   relationship_type_to_next: string | null
 }
 

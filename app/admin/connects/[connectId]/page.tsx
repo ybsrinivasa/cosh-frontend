@@ -158,7 +158,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
     // Validate all positions selected
     for (const pos of schema) {
       if (!selection[pos.position_number]) {
-        setSaveError(`Please select a value for "${coreMap[pos.core_id] || `Position ${pos.position_number}`}"`)
+        setSaveError(`Please select a value for "${pos.core_name || `Position ${pos.position_number}`}"`)
         return
       }
     }
@@ -325,7 +325,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                   <div key={pos.id} className="flex items-center">
                     <div className="bg-white border-2 border-slate-200 rounded-xl px-5 py-3 text-center min-w-32">
                       <p className="text-xs text-slate-400 mb-1">Position {pos.position_number}</p>
-                      <p className="text-sm font-semibold text-slate-800">{coreMap[pos.core_id] || pos.core_id}</p>
+                      <p className="text-sm font-semibold text-slate-800">{pos.core_name || pos.core_id}</p>
                     </div>
                     {idx < schema.length - 1 && (
                       <div className="flex flex-col items-center mx-3">
@@ -423,7 +423,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                       <div className="flex items-center gap-3">
                         <div className="w-36 flex-shrink-0">
                           <p className="text-xs font-medium text-slate-500 truncate">
-                            {coreMap[pos.core_id] || `Position ${pos.position_number}`}
+                            {pos.core_name || `Position ${pos.position_number}`}
                           </p>
                         </div>
                         <div className="flex-1">
@@ -431,7 +431,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                             items={coreItemsMap[pos.core_id] || []}
                             value={selection[pos.position_number] || ''}
                             onChange={id => setPos(pos.position_number, id)}
-                            placeholder={coreItemsLoading ? 'Loading…' : `Search ${coreMap[pos.core_id] || ''}…`}
+                            placeholder={coreItemsLoading ? 'Loading…' : `Search ${pos.core_name || ''}…`}
                             loading={coreItemsLoading}
                           />
                         </div>
@@ -496,7 +496,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                           <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 w-10">#</th>
                           {schema.map(p => (
                             <th key={p.id} className="text-left px-4 py-2.5 text-xs font-medium text-slate-500">
-                              {coreMap[p.core_id] || `Position ${p.position_number}`}
+                              {p.core_name || `Position ${p.position_number}`}
                             </th>
                           ))}
                           <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500">Status</th>
@@ -541,7 +541,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
             <p>One column per schema position, header must match Core name exactly. Values must match English values stored in Cosh.</p>
             {schema.length > 0 && (
               <p className="mt-2 font-mono text-xs bg-blue-100 px-2 py-1 rounded">
-                Expected columns: {schema.map(p => coreMap[p.core_id] || `Position ${p.position_number}`).join(' | ')}
+                Expected columns: {schema.map(p => p.core_name || `Position ${p.position_number}`).join(' | ')}
               </p>
             )}
             <p className="mt-1.5 text-xs text-blue-600">Duplicate rows are automatically skipped.</p>
