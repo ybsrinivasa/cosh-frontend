@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, use, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import { getStoredUser } from '@/lib/auth'
+import { getStoredUser, hasRole } from '@/lib/auth'
 import api from '@/lib/api'
 import type { Connect, SchemaPosition, ConnectDataItem, Core, RelationshipType } from '@/types'
 import PageHeader from '@/components/ui/PageHeader'
@@ -29,9 +29,14 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
   const [coreItemsLoading, setCoreItemsLoading] = useState(false)
   const coreItemsFetchedRef = useRef(false)  // ref guard prevents loop
 
-  // Manual entry form state
+  // Connect rename state
+  const [editingConnectName, setEditingConnectName] = useState(false)
+  const [editedConnectName, setEditedConnectName] = useState('')
+
+  // Manual entry form state — also used for editing existing rows
   // selection: position_number → core_data_item_id
   const [selection, setSelection] = useState<Record<number, string>>({})
+  const [editingRowId, setEditingRowId] = useState<string | null>(null)  // null = new row, id = editing existing
   const [savingRow, setSavingRow] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [saveSuccess, setSaveSuccess] = useState('')
@@ -143,12 +148,24 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
     setSelection({})
     setSaveError('')
     setSaveSuccess('')
+    setEditingRowId(null)
   }
 
   function buildFingerprint(sel: Record<number, string>): string {
     return schema
       .map(p => `${p.position_number}:${sel[p.position_number] || ''}`)
       .join('|')
+  }
+
+  async function renameConnect() {
+    if (!editedConnectName.trim()) return
+    try {
+      await api.put(`/connects/${connectId}`, { name: editedConnectName.trim() })
+      setEditingConnectName(false); load()
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      alert(err.response?.data?.detail || 'Failed to rename')
+    }
   }
 
   async function saveRow() {
@@ -163,9 +180,10 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
       }
     }
 
-    // Client-side duplicate check
+    // Client-side duplicate check (exclude the row being edited)
     const newFp = buildFingerprint(selection)
     const isDuplicate = items.some(item => {
+      if (editingRowId && item.id === editingRowId) return false  // skip self when editing
       const fp = item.positions
         .slice()
         .sort((a, b) => a.position_number - b.position_number)
@@ -184,12 +202,18 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
         position_number: pos.position_number,
         core_data_item_id: selection[pos.position_number],
       }))
-      const { data } = await api.post(`/connects/${connectId}/items`, payload)
-      // Optimistic update: add new item to list
-      setItems(prev => [...prev, data])
-      setSaveSuccess('Row saved successfully')
+      if (editingRowId) {
+        // Update existing row
+        await api.put(`/connects/${connectId}/items/${editingRowId}`, payload)
+        setSaveSuccess('Row updated')
+        setEditingRowId(null)
+      } else {
+        // Create new row
+        const { data } = await api.post(`/connects/${connectId}/items`, payload)
+        setItems(prev => [...prev, data])
+        setSaveSuccess('Row saved')
+      }
       clearForm()
-      // Also update items in background
       load()
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } }
@@ -296,11 +320,29 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
     <div>
       <div className="mb-6">
         <Link href="/admin/connects" className="text-sm text-teal-600 hover:underline">← Connects</Link>
-        <PageHeader
-          title={connect.name}
-          subtitle={connect.description || `${items.length} data row${items.length !== 1 ? 's' : ''} · ${schema.length} position${schema.length !== 1 ? 's' : ''}`}
-          action={<div className="flex gap-2"><Badge label={connect.status} variant={connect.status} /></div>}
-        />
+        {editingConnectName ? (
+          <div className="flex items-center gap-2 mt-2 mb-4">
+            <input autoFocus value={editedConnectName} onChange={e => setEditedConnectName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') renameConnect(); if (e.key === 'Escape') setEditingConnectName(false) }}
+              className="text-xl font-semibold text-slate-900 border-b-2 border-teal-500 focus:outline-none bg-transparent" />
+            <button onClick={renameConnect} className="text-teal-600 hover:text-teal-800 text-sm font-medium">Save</button>
+            <button onClick={() => setEditingConnectName(false)} className="text-slate-400 hover:text-slate-600 text-sm">Cancel</button>
+          </div>
+        ) : (
+          <PageHeader
+            title={connect.name}
+            subtitle={connect.description || `${items.length} data row${items.length !== 1 ? 's' : ''} · ${schema.length} position${schema.length !== 1 ? 's' : ''}`}
+            action={
+              <div className="flex gap-2 items-center">
+                {hasRole(getStoredUser(), 'DESIGNER', 'ADMIN') && (
+                  <button onClick={() => { setEditingConnectName(true); setEditedConnectName(connect.name) }}
+                    className="text-slate-400 hover:text-slate-700 text-lg px-1" title="Rename connect">✎</button>
+                )}
+                <Badge label={connect.status} variant={connect.status} />
+              </div>
+            }
+          />
+        )}
       </div>
 
       {/* Tabs — Settings hidden for Stockers */}
@@ -414,7 +456,9 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
               {/* ── Manual entry form — hidden when read-only ────────────────── */}
               {(!connect.assigned_stocker_id || connect.assigned_stocker_id === getStoredUser()?.id) && (
               <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6">
-                <h3 className="text-sm font-semibold text-slate-800 mb-4">Add new row</h3>
+                <h3 className="text-sm font-semibold text-slate-800 mb-4">
+                  {editingRowId ? '✎ Edit row' : 'Add new row'}
+                </h3>
 
                 <div className="space-y-1 max-w-xl">
                   {schema.map((pos, idx) => (
@@ -459,7 +503,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                   <button onClick={saveRow} disabled={savingRow}
                     className="px-5 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 font-medium flex items-center gap-2">
                     {savingRow && <LoadingSpinner size="sm" />}
-                    Save Row
+                    {editingRowId ? 'Update Row' : 'Save Row'}
                   </button>
                   <button onClick={clearForm} className="px-4 py-2 text-sm text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg hover:bg-slate-50">
                     Clear
@@ -515,7 +559,26 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                                 <td key={p.id} className="px-4 py-3 text-slate-800 font-medium">{label}</td>
                               )
                             })}
-                            <td className="px-4 py-3"><Badge label={item.status} variant={item.status} /></td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <Badge label={item.status} variant={item.status} />
+                                {item.status === 'ACTIVE' && (!connect.assigned_stocker_id || connect.assigned_stocker_id === getStoredUser()?.id) && (
+                                  <button
+                                    onClick={() => {
+                                      const preselect: Record<number, string> = {}
+                                      item.positions.forEach(p => { preselect[p.position_number] = p.core_data_item_id })
+                                      setSelection(preselect)
+                                      setEditingRowId(item.id)
+                                      setSaveError(''); setSaveSuccess('')
+                                      // Switch to Data tab and scroll form into view
+                                    }}
+                                    className="text-xs text-teal-600 hover:text-teal-800 border border-teal-200 px-2 py-0.5 rounded hover:bg-teal-50 transition-colors"
+                                  >
+                                    Edit
+                                  </button>
+                                )}
+                              </div>
+                            </td>
                           </tr>
                         ))}
                       </tbody>

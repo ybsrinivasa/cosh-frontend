@@ -16,6 +16,8 @@ export default function ConnectsPage() {
   const [form, setForm] = useState({ name: '', description: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState('')
 
   useEffect(() => { load() }, [])
 
@@ -24,6 +26,17 @@ export default function ConnectsPage() {
       const { data } = await api.get('/connects')
       setConnects(data)
     } finally { setLoading(false) }
+  }
+
+  async function renameConnect(id: string) {
+    if (!editingName.trim()) return
+    try {
+      await api.put(`/connects/${id}`, { name: editingName.trim() })
+      setEditingId(null); load()
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      alert(err.response?.data?.detail || 'Failed to rename')
+    }
   }
 
   async function create() {
@@ -62,19 +75,32 @@ export default function ConnectsPage() {
           </div>
         ) : (
           connects.map(connect => (
-            <Link key={connect.id} href={`/admin/connects/${connect.id}`}
-              className="flex items-center justify-between px-5 py-4 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
-              <div>
-                <p className="font-medium text-slate-800">{connect.name}</p>
-                {connect.description && <p className="text-sm text-slate-400 mt-0.5">{connect.description}</p>}
-              </div>
-              <div className="flex items-center gap-2">
+            <div key={connect.id} className="flex items-center justify-between px-5 py-4 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
+              {editingId === connect.id ? (
+                <div className="flex items-center gap-2 flex-1" onClick={e => e.stopPropagation()}>
+                  <input autoFocus value={editingName} onChange={e => setEditingName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') renameConnect(connect.id); if (e.key === 'Escape') setEditingId(null) }}
+                    className="font-medium text-slate-800 border-b-2 border-teal-400 focus:outline-none bg-transparent flex-1" />
+                  <button onClick={() => renameConnect(connect.id)} className="text-sm text-teal-600 hover:text-teal-800 font-medium">Save</button>
+                  <button onClick={() => setEditingId(null)} className="text-sm text-slate-400 hover:text-slate-600">Cancel</button>
+                </div>
+              ) : (
+                <Link href={`/admin/connects/${connect.id}`} className="flex-1 min-w-0">
+                  <p className="font-medium text-slate-800">{connect.name}</p>
+                  {connect.description && <p className="text-sm text-slate-400 mt-0.5">{connect.description}</p>}
+                </Link>
+              )}
+              <div className="flex items-center gap-2 flex-shrink-0">
                 <Badge label={connect.status} variant={connect.status} />
                 {connect.schema_finalised && <Badge label="Schema locked" variant="active" />}
                 {connect.is_public && <Badge label="Public" variant="active" />}
-                <span className="text-slate-300">›</span>
+                {hasRole(getStoredUser(), 'DESIGNER', 'ADMIN') && editingId !== connect.id && (
+                  <button onClick={e => { e.preventDefault(); setEditingId(connect.id); setEditingName(connect.name) }}
+                    className="text-slate-300 hover:text-slate-600 text-sm px-1" title="Rename">✎</button>
+                )}
+                <Link href={`/admin/connects/${connect.id}`} className="text-slate-300">›</Link>
               </div>
-            </Link>
+            </div>
           ))
         )}
       </div>

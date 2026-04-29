@@ -20,6 +20,9 @@ export default function FoldersPage() {
   const [newCore, setNewCore] = useState({ name: '', folder_id: '', core_type: 'TEXT', description: '', language_mode: 'TRANSLATION' })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
+  const [editingFolderName, setEditingFolderName] = useState('')
+  const [editingConnectId, setEditingConnectId] = useState<string | null>(null)
 
   useEffect(() => { load() }, [])
 
@@ -58,6 +61,17 @@ export default function FoldersPage() {
     } finally { setSaving(false) }
   }
 
+  async function renameFolder(id: string) {
+    if (!editingFolderName.trim()) return
+    try {
+      await api.put(`/folders/${id}`, { name: editingFolderName.trim() })
+      setEditingFolderId(null); load()
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      alert(err.response?.data?.detail || 'Failed to rename folder')
+    }
+  }
+
   const foldersWithCores = folders.map(f => ({
     ...f,
     cores: cores.filter(c => c.folder_id === f.id)
@@ -87,15 +101,34 @@ export default function FoldersPage() {
       <div className="space-y-4">
         {foldersWithCores.map(folder => (
           <div key={folder.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-            <div
-              className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-200 cursor-pointer"
-              onClick={() => setSelectedFolder(selectedFolder === folder.id ? '' : folder.id)}
-            >
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-200">
+              <div className="flex items-center gap-2 flex-1 cursor-pointer"
+                onClick={() => setSelectedFolder(selectedFolder === folder.id ? '' : folder.id)}>
                 <span className="text-slate-400">{selectedFolder === folder.id ? '▾' : '▸'}</span>
-                <span className="font-medium text-slate-800">📁 {folder.name}</span>
+                {editingFolderId === folder.id ? (
+                  <input autoFocus value={editingFolderName}
+                    onChange={e => setEditingFolderName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') renameFolder(folder.id); if (e.key === 'Escape') setEditingFolderId(null) }}
+                    onClick={e => e.stopPropagation()}
+                    className="font-medium text-slate-800 bg-white border border-teal-400 rounded px-2 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500" />
+                ) : (
+                  <span className="font-medium text-slate-800">📁 {folder.name}</span>
+                )}
                 <span className="text-xs text-slate-400">{folder.cores.length} core{folder.cores.length !== 1 ? 's' : ''}</span>
               </div>
+              {hasRole(getStoredUser(), 'DESIGNER', 'ADMIN') && (
+                editingFolderId === folder.id ? (
+                  <div className="flex gap-1">
+                    <button onClick={() => renameFolder(folder.id)} className="text-xs text-teal-600 hover:text-teal-800 px-2 py-1">✓</button>
+                    <button onClick={() => setEditingFolderId(null)} className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1">✕</button>
+                  </div>
+                ) : (
+                  <button onClick={e => { e.stopPropagation(); setEditingFolderId(folder.id); setEditingFolderName(folder.name) }}
+                    className="text-slate-300 hover:text-slate-600 px-2 py-1 text-sm transition-colors" title="Rename folder">
+                    ✎
+                  </button>
+                )
+              )}
             </div>
             {selectedFolder === folder.id && (
               <div className="divide-y divide-slate-100">

@@ -2,7 +2,7 @@
 import { useState, useEffect, use } from 'react'
 import api from '@/lib/api'
 import type { Core, CoreDataItem, CoreLanguageConfig, Language } from '@/types'
-import { getStoredUser } from '@/lib/auth'
+import { getStoredUser, hasRole } from '@/lib/auth'
 
 interface StockerUser { id: string; name: string; email: string }
 import PageHeader from '@/components/ui/PageHeader'
@@ -32,6 +32,12 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
   const [uploadResult, setUploadResult] = useState<string>('')
   const [uploading, setUploading] = useState(false)
   const [expandedItem, setExpandedItem] = useState<string | null>(null)
+  // Editing state
+  const [editingCoreName, setEditingCoreName] = useState(false)
+  const [editedCoreName, setEditedCoreName] = useState('')
+  const [editingItemId, setEditingItemId] = useState<string | null>(null)
+  const [editingItemValue, setEditingItemValue] = useState('')
+  const [editingItemSaving, setEditingItemSaving] = useState(false)
 
   useEffect(() => { load() }, [coreId])
 
@@ -71,6 +77,29 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
     } catch {
       setAssignmentMsg('✗ Failed to save')
     } finally { setSavingAssignment(false) }
+  }
+
+  async function renameCore() {
+    if (!editedCoreName.trim() || !core) return
+    try {
+      await api.put(`/cores/${coreId}`, { name: editedCoreName.trim() })
+      setEditingCoreName(false); load()
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      alert(err.response?.data?.detail || 'Failed to rename')
+    }
+  }
+
+  async function saveItemEdit() {
+    if (!editingItemValue.trim() || !editingItemId) return
+    setEditingItemSaving(true)
+    try {
+      await api.put(`/cores/${coreId}/items/${editingItemId}`, { english_value: editingItemValue.trim() })
+      setEditingItemId(null); load()
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      alert(err.response?.data?.detail || 'Failed to update')
+    } finally { setEditingItemSaving(false) }
   }
 
   async function toggleStatus(item: CoreDataItem) {
@@ -121,16 +150,30 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
     <div>
       <div className="mb-6">
         <Link href="/admin/folders" className="text-sm text-teal-600 hover:underline">← Folders</Link>
-        <PageHeader
-          title={core.name}
-          subtitle={`${core.core_type} Core · ${items.length} items · ${languages.length} language${languages.length !== 1 ? 's' : ''}`}
-          action={
-            <div className="flex gap-2">
-              <Badge label={core.status} variant={core.status} />
-              <Badge label={core.core_type} variant={core.core_type} />
-            </div>
-          }
-        />
+        {editingCoreName ? (
+          <div className="flex items-center gap-2 mt-2 mb-4">
+            <input autoFocus value={editedCoreName} onChange={e => setEditedCoreName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') renameCore(); if (e.key === 'Escape') setEditingCoreName(false) }}
+              className="text-xl font-semibold text-slate-900 border-b-2 border-teal-500 focus:outline-none bg-transparent" />
+            <button onClick={renameCore} className="text-teal-600 hover:text-teal-800 text-sm font-medium">Save</button>
+            <button onClick={() => setEditingCoreName(false)} className="text-slate-400 hover:text-slate-600 text-sm">Cancel</button>
+          </div>
+        ) : (
+          <PageHeader
+            title={core.name}
+            subtitle={`${core.core_type} Core · ${items.length} items · ${languages.length} language${languages.length !== 1 ? 's' : ''}`}
+            action={
+              <div className="flex gap-2 items-center">
+                {hasRole(getStoredUser(), 'DESIGNER', 'ADMIN') && (
+                  <button onClick={() => { setEditingCoreName(true); setEditedCoreName(core.name) }}
+                    className="text-slate-400 hover:text-slate-700 text-lg px-1" title="Rename core">✎</button>
+                )}
+                <Badge label={core.status} variant={core.status} />
+                <Badge label={core.core_type} variant={core.core_type} />
+              </div>
+            }
+          />
+        )}
       </div>
 
       {/* Tabs — Settings hidden for Stockers */}
@@ -175,21 +218,44 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                   <div className="flex items-center justify-between px-4 py-3 hover:bg-slate-50">
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                       <span className="text-xs text-slate-400 w-6 flex-shrink-0">{idx + 1}</span>
-                      <span className="text-sm text-slate-800 truncate">{item.english_value}</span>
+                      {editingItemId === item.id ? (
+                        <input autoFocus value={editingItemValue}
+                          onChange={e => setEditingItemValue(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') saveItemEdit(); if (e.key === 'Escape') setEditingItemId(null) }}
+                          className="flex-1 text-sm border-b border-teal-400 focus:outline-none bg-transparent text-slate-800" />
+                      ) : (
+                        <span className="text-sm text-slate-800 truncate">{item.english_value}</span>
+                      )}
                       {item.legacy_item_id && (
                         <span className="text-xs text-slate-400 font-mono hidden sm:inline">{item.legacy_item_id}</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-xs text-slate-400">{item.translations.length} trans.</span>
-                      <button onClick={() => setExpandedItem(expandedItem === item.id ? null : item.id)}
-                        className="text-xs text-teal-600 hover:underline">
-                        {expandedItem === item.id ? 'hide' : 'view'}
-                      </button>
-                      <button onClick={() => toggleStatus(item)}
-                        className={`text-xs px-2 py-0.5 rounded border transition-colors ${item.status === 'ACTIVE' ? 'border-red-200 text-red-500 hover:bg-red-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'}`}>
-                        {item.status === 'ACTIVE' ? 'Inactivate' : 'Activate'}
-                      </button>
+                      {editingItemId === item.id ? (
+                        <>
+                          <button onClick={saveItemEdit} disabled={editingItemSaving}
+                            className="text-xs text-teal-600 hover:text-teal-800 font-medium">
+                            {editingItemSaving ? '…' : '✓ Save'}
+                          </button>
+                          <button onClick={() => setEditingItemId(null)} className="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
+                        </>
+                      ) : (
+                        <>
+                          {(!core.assigned_stocker_id || core.assigned_stocker_id === getStoredUser()?.id) && item.status === 'ACTIVE' && (
+                            <button onClick={() => { setEditingItemId(item.id); setEditingItemValue(item.english_value) }}
+                              className="text-slate-300 hover:text-slate-600 text-sm" title="Edit value">✎</button>
+                          )}
+                          <span className="text-xs text-slate-400">{item.translations.length} trans.</span>
+                          <button onClick={() => setExpandedItem(expandedItem === item.id ? null : item.id)}
+                            className="text-xs text-teal-600 hover:underline">
+                            {expandedItem === item.id ? 'hide' : 'view'}
+                          </button>
+                          <button onClick={() => toggleStatus(item)}
+                            className={`text-xs px-2 py-0.5 rounded border transition-colors ${item.status === 'ACTIVE' ? 'border-red-200 text-red-500 hover:bg-red-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'}`}>
+                            {item.status === 'ACTIVE' ? 'Inactivate' : 'Activate'}
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                   {expandedItem === item.id && item.translations.length > 0 && (
