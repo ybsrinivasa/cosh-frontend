@@ -1,16 +1,21 @@
 'use client'
 import { useState, useEffect } from 'react'
 import api from '@/lib/api'
+import { getStoredUser, hasRole } from '@/lib/auth'
 import type { MigrationStatus } from '@/types'
 import PageHeader from '@/components/ui/PageHeader'
 import Badge from '@/components/ui/Badge'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import AccessDenied from '@/components/ui/AccessDenied'
 
 export default function MigrationPage() {
   const [status, setStatus] = useState<MigrationStatus | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    if (!hasRole(getStoredUser(), 'DESIGNER', 'ADMIN')) { setLoading(false); return }
+    load()
+  }, [])
 
   async function load() {
     try {
@@ -20,6 +25,7 @@ export default function MigrationPage() {
   }
 
   if (loading) return <div className="flex justify-center py-20"><LoadingSpinner size="lg" /></div>
+  if (!hasRole(getStoredUser(), 'DESIGNER', 'ADMIN')) return <AccessDenied message="Migration Status is available to Designers and Admins only." />
   if (!status) return null
 
   return (

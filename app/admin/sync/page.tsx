@@ -1,10 +1,12 @@
 'use client'
 import { useState, useEffect } from 'react'
 import api from '@/lib/api'
+import { getStoredUser, isAdmin } from '@/lib/auth'
 import type { ProductSyncState, ChangeTable, SyncHistory } from '@/types'
 import PageHeader from '@/components/ui/PageHeader'
 import Badge from '@/components/ui/Badge'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import AccessDenied from '@/components/ui/AccessDenied'
 
 export default function SyncPage() {
   const [products, setProducts] = useState<ProductSyncState[]>([])
@@ -18,7 +20,10 @@ export default function SyncPage() {
   const [dispatching, setDispatching] = useState(false)
   const [dispatchResult, setDispatchResult] = useState('')
 
-  useEffect(() => { loadProducts() }, [])
+  useEffect(() => {
+    if (!isAdmin(getStoredUser())) { setLoading(false); return }
+    loadProducts()
+  }, [])
 
   async function loadProducts() {
     try {
@@ -68,6 +73,7 @@ export default function SyncPage() {
   }
 
   if (loading) return <div className="flex justify-center py-20"><LoadingSpinner size="lg" /></div>
+  if (!isAdmin(getStoredUser())) return <AccessDenied message="Sync Management is available to Admins only." />
 
   return (
     <div>
