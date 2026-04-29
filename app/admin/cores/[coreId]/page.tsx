@@ -218,20 +218,26 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
             <button onClick={() => setEditingCoreName(false)} className="text-slate-400 hover:text-slate-600 text-sm">Cancel</button>
           </div>
         ) : (
-          <PageHeader
-            title={core.name}
-            subtitle={`${core.core_type} Core · ${items.length} item${items.length !== 1 ? 's' : ''}${!isMedia ? ` · ${languages.length} language${languages.length !== 1 ? 's' : ''}` : ''}`}
-            action={
-              <div className="flex gap-2 items-center">
+          <div className="flex items-start justify-between mb-6">
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-semibold text-slate-900">{core.name}</h1>
                 {hasRole(getStoredUser(), 'DESIGNER', 'ADMIN') && (
                   <button onClick={() => { setEditingCoreName(true); setEditedCoreName(core.name) }}
-                    className="text-slate-400 hover:text-slate-700 text-lg px-1" title="Rename core">✎</button>
+                    className="text-slate-400 hover:text-teal-600 text-base px-1 flex-shrink-0" title="Rename core">✎</button>
                 )}
-                <Badge label={core.status} variant={core.status} />
-                <Badge label={core.core_type} variant={core.core_type} />
               </div>
-            }
-          />
+              <p className="text-sm text-slate-500 mt-0.5">
+                {core.core_type} Core · {items.length} {isMedia ? 'image' : 'item'}{items.length !== 1 ? 's' : ''}
+                {!isMedia && ` · ${languages.length} language${languages.length !== 1 ? 's' : ''}`}
+              </p>
+            </div>
+            <div className="flex gap-2 items-center">
+              <Badge label={core.status} variant={core.status} />
+              <Badge label={core.core_type} variant={core.core_type} />
+              {isMedia && core.content_type && <Badge label={core.content_type} />}
+            </div>
+          </div>
         )}
       </div>
 
@@ -242,7 +248,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
           .map(t => (
             <button key={t} onClick={() => setTab(t as typeof tab)}
               className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${tab === t ? 'border-b-2 border-teal-600 text-teal-600' : 'text-slate-500 hover:text-slate-700'}`}>
-              {t === 'items' ? `${isMedia ? 'Images' : 'Items'} (${items.length})` : t === 'languages' ? `Languages (${languages.length})` : t === 'upload' ? 'CSV Upload' : 'Settings'}
+              {t === 'items' ? `${isMedia ? 'Images' : 'Items'} (${items.length})` : t === 'languages' ? `Languages (${languages.length})` : t === 'upload' ? (isMedia ? 'Bulk Import' : 'CSV Upload') : 'Settings'}
             </button>
           ))}
       </div>
@@ -446,17 +452,22 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
               🔒 <span>This Core is assigned to a Stocker. Only the assigned Stocker can upload data.</span>
             </div>
           )}
+          {isMedia && (
+            <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 mb-4 text-sm text-violet-800">
+              <p className="font-medium mb-1">What is Bulk Import?</p>
+              <p>Use this to import many images at once from a CSV. The CSV contains the image <strong>names</strong> and their existing <strong>S3 URLs</strong> — it does not upload image files. To upload a single new image file from your computer, use <strong>+ Add Image</strong> on the Images tab instead.</p>
+            </div>
+          )}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 text-sm text-blue-800">
-            <p className="font-medium mb-1">CSV format{isMedia ? ' — Image Core' : ''}</p>
+            <p className="font-medium mb-1">{isMedia ? 'CSV format — required columns' : 'CSV format'}</p>
             {isMedia ? (
               <>
-                <p>Required columns:</p>
                 <ul className="mt-1 ml-3 space-y-0.5">
                   <li><code className="bg-blue-100 px-1 rounded">English_name</code> — image label</li>
-                  <li><code className="bg-blue-100 px-1 rounded">English_url</code> — full S3 URL</li>
+                  <li><code className="bg-blue-100 px-1 rounded">English_url</code> — full S3 URL of the image</li>
                 </ul>
                 <p className="mt-1.5">Optional: <code className="bg-blue-100 px-1 rounded">id</code> (stored as legacy ID)</p>
-                <p className="mt-1.5 text-xs text-blue-600">Rows already in the Core are skipped. URLs are updated if the name matches.</p>
+                <p className="mt-1.5 text-xs text-blue-600">Names already in the Core are skipped. Existing URLs are updated if the name matches.</p>
               </>
             ) : (
               <>
