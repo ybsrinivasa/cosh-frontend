@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import api from '@/lib/api'
+import { getStoredUser, hasRole } from '@/lib/auth'
 import type { Connect } from '@/types'
 import PageHeader from '@/components/ui/PageHeader'
 import Badge from '@/components/ui/Badge'
@@ -44,12 +45,12 @@ export default function ConnectsPage() {
       <PageHeader
         title="Connects"
         subtitle={`${connects.length} connect${connects.length !== 1 ? 's' : ''}`}
-        action={
+        action={hasRole(getStoredUser(), 'DESIGNER', 'ADMIN') ? (
           <button onClick={() => { setShowModal(true); setError('') }}
             className="px-3 py-1.5 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium">
             + New Connect
           </button>
-        }
+        ) : undefined}
       />
 
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">

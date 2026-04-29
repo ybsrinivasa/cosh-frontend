@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import api from '@/lib/api'
+import { getStoredUser, hasRole } from '@/lib/auth'
 import type { Folder, Core } from '@/types'
 import PageHeader from '@/components/ui/PageHeader'
 import Badge from '@/components/ui/Badge'
@@ -69,7 +70,7 @@ export default function FoldersPage() {
       <PageHeader
         title="Folders & Cores"
         subtitle={`${folders.length} folders · ${cores.length} cores`}
-        action={
+        action={hasRole(getStoredUser(), 'DESIGNER', 'ADMIN') ? (
           <div className="flex gap-2">
             <button onClick={() => { setShowCoreModal(true); setError('') }}
               className="px-3 py-1.5 text-sm bg-white border border-slate-300 rounded-lg hover:bg-slate-50 font-medium">
@@ -80,7 +81,7 @@ export default function FoldersPage() {
               + New Folder
             </button>
           </div>
-        }
+        ) : undefined}
       />
 
       <div className="space-y-4">
