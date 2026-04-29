@@ -348,13 +348,13 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
   return (
     <div>
       <div className="mb-6">
-        <Link href="/admin/connects" className="text-sm text-teal-600 hover:underline">← Connects</Link>
+        <Link href="/admin/connects" className="text-sm text-green-600 hover:underline">← Connects</Link>
         {editingConnectName ? (
           <div className="flex items-center gap-2 mt-2 mb-4">
             <input autoFocus value={editedConnectName} onChange={e => setEditedConnectName(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') renameConnect(); if (e.key === 'Escape') setEditingConnectName(false) }}
-              className="text-xl font-semibold text-slate-900 border-b-2 border-teal-500 focus:outline-none bg-transparent" />
-            <button onClick={renameConnect} className="text-teal-600 hover:text-teal-800 text-sm font-medium">Save</button>
+              className="text-xl font-semibold text-slate-900 border-b-2 border-green-500 focus:outline-none bg-transparent" />
+            <button onClick={renameConnect} className="text-green-600 hover:text-green-800 text-sm font-medium">Save</button>
             <button onClick={() => setEditingConnectName(false)} className="text-slate-400 hover:text-slate-600 text-sm">Cancel</button>
           </div>
         ) : (
@@ -380,7 +380,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
           .filter(t => !(t === 'settings' && connect.assigned_stocker_id === getStoredUser()?.id))
           .map(t => (
             <button key={t} onClick={() => setTab(t)}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${tab === t ? 'border-b-2 border-teal-600 text-teal-600' : 'text-slate-500 hover:text-slate-700'}`}>
+              className={`px-4 py-2 text-sm font-medium transition-colors ${tab === t ? 'border-b-2 border-green-600 text-green-600' : 'text-slate-500 hover:text-slate-700'}`}>
               {t === 'schema' ? 'Schema' : t === 'data' ? `Data (${items.length})` : t === 'upload' ? 'Excel Upload' : 'Settings'}
             </button>
           ))}
@@ -403,7 +403,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                     </div>
                     {idx < schema.length - 1 && (
                       <div className="flex flex-col items-center mx-3">
-                        <span className="text-xs font-mono text-teal-700 bg-teal-50 border border-teal-200 px-2 py-1 rounded whitespace-nowrap">
+                        <span className="text-xs font-mono text-green-700 bg-green-50 border border-green-200 px-2 py-1 rounded whitespace-nowrap">
                           {pos.relationship_type_to_next}
                         </span>
                         <span className="text-slate-400 text-xl mt-0.5">→</span>
@@ -434,7 +434,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                         <div className="flex gap-2">
                           <button
                             onClick={() => switchNodeType(idx, 'CORE')}
-                            className={`px-3 py-1 text-xs rounded-full border font-medium transition-colors ${pos.node_type === 'CORE' ? 'bg-teal-600 text-white border-teal-600' : 'border-slate-300 text-slate-500 hover:border-slate-400'}`}
+                            className={`px-3 py-1 text-xs rounded-full border font-medium transition-colors ${pos.node_type === 'CORE' ? 'bg-green-600 text-white border-green-600' : 'border-slate-300 text-slate-500 hover:border-slate-400'}`}
                           >Core</button>
                           <button
                             onClick={() => switchNodeType(idx, 'CONNECT')}
@@ -444,7 +444,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
 
                         {pos.node_type === 'CORE' ? (
                           <select value={pos.core_id} onChange={e => updatePos(idx, 'core_id', e.target.value)}
-                            className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                            className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
                             <option value="">Select a Core…</option>
                             {activeCores.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                           </select>
@@ -469,7 +469,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                           <div className="flex items-center gap-2">
                             <span className="text-slate-400">↓</span>
                             <select value={pos.relationship_type_to_next} onChange={e => updatePos(idx, 'relationship_type_to_next', e.target.value)}
-                              className="flex-1 border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-teal-50 text-teal-800 font-mono">
+                              className="flex-1 border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-green-50 text-green-800 font-mono">
                               <option value="">Select relationship type…</option>
                               {relTypes.map(rt => <option key={rt.id} value={rt.label}>{rt.label} — {rt.display_name}</option>)}
                             </select>
@@ -484,7 +484,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
               <div className="flex items-center gap-3 mt-4">
                 <button onClick={addPosition} className="px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 text-slate-600 font-medium">+ Add Position</button>
                 <button onClick={saveSchema} disabled={savingSchema}
-                  className="px-5 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 font-medium flex items-center gap-2">
+                  className="px-5 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium flex items-center gap-2">
                   {savingSchema && <LoadingSpinner size="sm" />} Save Schema
                 </button>
               </div>
@@ -539,7 +539,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                             <div className="w-px h-3 bg-slate-200" />
                             <div className="flex items-center gap-1.5">
                               <span className="text-slate-300 text-sm">↓</span>
-                              <span className="text-xs font-mono text-teal-600 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded">
+                              <span className="text-xs font-mono text-green-600 bg-green-50 border border-green-200 px-2 py-0.5 rounded">
                                 {pos.relationship_type_to_next}
                               </span>
                               <span className="text-slate-300 text-sm">↓</span>
@@ -551,7 +551,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                   </div>
                   <div className="flex items-center gap-3 mt-5">
                     <button onClick={saveRow} disabled={savingRow}
-                      className="px-5 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 font-medium flex items-center gap-2">
+                      className="px-5 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium flex items-center gap-2">
                       {savingRow && <LoadingSpinner size="sm" />}
                       {editingRowId ? 'Update Row' : 'Save Row'}
                     </button>
@@ -621,7 +621,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                                           setEditingRowId(item.id)
                                           setSaveError(''); setSaveSuccess('')
                                         }}
-                                        className="text-xs text-teal-600 hover:text-teal-800 border border-teal-200 px-2 py-0.5 rounded hover:bg-teal-50 transition-colors"
+                                        className="text-xs text-green-600 hover:text-green-800 border border-green-200 px-2 py-0.5 rounded hover:bg-green-50 transition-colors"
                                       >Edit</button>
                                     )}
                                     <button
@@ -672,14 +672,14 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
           <div className="bg-white border-2 border-dashed border-slate-300 rounded-xl p-8 text-center">
             <input type="file" accept=".xlsx,.xls"
               onChange={e => setUploadFile(e.target.files?.[0] || null)}
-              className="block w-full text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100" />
+              className="block w-full text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-green-50 file:text-green-700 hover:file:bg-green-100" />
           </div>
           {uploadFile && (
             <div className="mt-4">
               <p className="text-sm text-slate-600 mb-2">Selected: <strong>{uploadFile.name}</strong></p>
               <button onClick={uploadExcel}
                 disabled={uploading || schema.length === 0 || !!(connect.assigned_stocker_id && connect.assigned_stocker_id !== getStoredUser()?.id)}
-                className="px-4 py-2 bg-teal-600 text-white text-sm rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2">
+                className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
                 {uploading && <LoadingSpinner size="sm" />}
                 {uploading ? 'Processing…' : 'Upload Excel'}
               </button>
@@ -706,12 +706,12 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
             <p className="text-sm text-slate-500 mb-4">The Stocker responsible for uploading data to this Connect.</p>
             <div className="flex gap-3 items-center">
               <select value={assignedStockerId} onChange={e => setAssignedStockerId(e.target.value)}
-                className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
                 <option value="">— Unassigned —</option>
                 {stockers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
               <button onClick={saveAssignment} disabled={savingAssignment}
-                className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2 flex-shrink-0">
+                className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 flex-shrink-0">
                 {savingAssignment && <LoadingSpinner size="sm" />} Save
               </button>
             </div>

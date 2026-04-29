@@ -60,7 +60,7 @@ export default function ConnectsPage() {
         subtitle={`${connects.length} connect${connects.length !== 1 ? 's' : ''}`}
         action={hasRole(getStoredUser(), 'DESIGNER', 'ADMIN') ? (
           <button onClick={() => { setShowModal(true); setError('') }}
-            className="px-3 py-1.5 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium">
+            className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
             + New Connect
           </button>
         ) : undefined}
@@ -80,8 +80,8 @@ export default function ConnectsPage() {
                 <div className="flex items-center gap-2 flex-1" onClick={e => e.stopPropagation()}>
                   <input autoFocus value={editingName} onChange={e => setEditingName(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') renameConnect(connect.id); if (e.key === 'Escape') setEditingId(null) }}
-                    className="font-medium text-slate-800 border-b-2 border-teal-400 focus:outline-none bg-transparent flex-1" />
-                  <button onClick={() => renameConnect(connect.id)} className="text-sm text-teal-600 hover:text-teal-800 font-medium">Save</button>
+                    className="font-medium text-slate-800 border-b-2 border-green-400 focus:outline-none bg-transparent flex-1" />
+                  <button onClick={() => renameConnect(connect.id)} className="text-sm text-green-600 hover:text-green-800 font-medium">Save</button>
                   <button onClick={() => setEditingId(null)} className="text-sm text-slate-400 hover:text-slate-600">Cancel</button>
                 </div>
               ) : (
@@ -112,20 +112,20 @@ export default function ConnectsPage() {
               <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
               <input autoFocus value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
                 onKeyDown={e => e.key === 'Enter' && create()}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                 placeholder="e.g. Brand to Manufacturer" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Description (optional)</label>
               <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                 placeholder="What does this Connect represent?" />
             </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-slate-600">Cancel</button>
               <button onClick={create} disabled={saving || !form.name.trim()}
-                className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2">
+                className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
                 {saving && <LoadingSpinner size="sm" />} Create Connect
               </button>
             </div>

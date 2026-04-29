@@ -128,7 +128,7 @@ export default function MigrationPage() {
                     <span className="text-xs font-semibold text-slate-800">{l.coverage_pct}%</span>
                   </div>
                   <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden mb-1">
-                    <div className="h-full bg-teal-500 rounded-full transition-all" style={{ width: `${l.coverage_pct}%` }} />
+                    <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${l.coverage_pct}%` }} />
                   </div>
                   <p className="text-xs text-slate-400">{l.translated.toLocaleString()} translated · {l.expert_validated} expert</p>
                 </div>

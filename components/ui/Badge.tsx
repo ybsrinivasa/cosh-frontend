@@ -9,7 +9,7 @@ const variants: Record<string, string> = {
   dispatched: 'bg-blue-100 text-blue-700',
   admin: 'bg-purple-100 text-purple-700',
   designer: 'bg-blue-100 text-blue-700',
-  stocker: 'bg-teal-100 text-teal-700',
+  stocker: 'bg-green-100 text-green-700',
   reviewer: 'bg-amber-100 text-amber-700',
   text: 'bg-sky-100 text-sky-700',
   media: 'bg-violet-100 text-violet-700',

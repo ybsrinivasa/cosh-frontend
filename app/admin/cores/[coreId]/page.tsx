@@ -208,13 +208,13 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
       )}
 
       <div className="mb-6">
-        <Link href="/admin/folders" className="text-sm text-teal-600 hover:underline">← Folders</Link>
+        <Link href="/admin/folders" className="text-sm text-green-600 hover:underline">← Folders</Link>
         {editingCoreName ? (
           <div className="flex items-center gap-2 mt-2 mb-4">
             <input autoFocus value={editedCoreName} onChange={e => setEditedCoreName(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') renameCore(); if (e.key === 'Escape') setEditingCoreName(false) }}
-              className="text-xl font-semibold text-slate-900 border-b-2 border-teal-500 focus:outline-none bg-transparent" />
-            <button onClick={renameCore} className="text-teal-600 hover:text-teal-800 text-sm font-medium">Save</button>
+              className="text-xl font-semibold text-slate-900 border-b-2 border-green-500 focus:outline-none bg-transparent" />
+            <button onClick={renameCore} className="text-green-600 hover:text-green-800 text-sm font-medium">Save</button>
             <button onClick={() => setEditingCoreName(false)} className="text-slate-400 hover:text-slate-600 text-sm">Cancel</button>
           </div>
         ) : (
@@ -224,7 +224,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                 <h1 className="text-xl font-semibold text-slate-900">{core.name}</h1>
                 {hasRole(getStoredUser(), 'DESIGNER', 'ADMIN') && (
                   <button onClick={() => { setEditingCoreName(true); setEditedCoreName(core.name) }}
-                    className="text-slate-400 hover:text-teal-600 text-base px-1 flex-shrink-0" title="Rename core">✎</button>
+                    className="text-slate-400 hover:text-green-600 text-base px-1 flex-shrink-0" title="Rename core">✎</button>
                 )}
               </div>
               <p className="text-sm text-slate-500 mt-0.5">
@@ -247,7 +247,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
           .filter(t => !(t === 'settings' && core.assigned_stocker_id === getStoredUser()?.id))
           .map(t => (
             <button key={t} onClick={() => setTab(t as typeof tab)}
-              className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${tab === t ? 'border-b-2 border-teal-600 text-teal-600' : 'text-slate-500 hover:text-slate-700'}`}>
+              className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${tab === t ? 'border-b-2 border-green-600 text-green-600' : 'text-slate-500 hover:text-slate-700'}`}>
               {t === 'items' ? `${isMedia ? 'Images' : 'Items'} (${items.length})` : t === 'languages' ? `Languages (${languages.length})` : t === 'upload' ? (isMedia ? 'Bulk Import' : 'CSV Upload') : 'Settings'}
             </button>
           ))}
@@ -265,10 +265,10 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
           <div className="flex gap-3 mb-4">
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder={isMedia ? 'Search by name…' : 'Search items…'}
-              className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+              className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
             {canWrite && (
               <button onClick={() => { setShowAddItem(true); setError('') }}
-                className="px-3 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium">
+                className="px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
                 + {isMedia ? 'Add Image' : 'Add Item'}
               </button>
             )}
@@ -287,13 +287,13 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                       <div className="p-3 space-y-2">
                         <input autoFocus value={editingItemValue} onChange={e => setEditingItemValue(e.target.value)}
                           placeholder="Name"
-                          className="w-full text-xs border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-teal-500" />
+                          className="w-full text-xs border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-500" />
                         <input value={editingItemUrl} onChange={e => setEditingItemUrl(e.target.value)}
                           placeholder="Image URL"
-                          className="w-full text-xs border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-teal-500" />
+                          className="w-full text-xs border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-500" />
                         <div className="flex gap-2">
                           <button onClick={saveItemEdit} disabled={editingItemSaving}
-                            className="flex-1 text-xs bg-teal-600 text-white rounded px-2 py-1 hover:bg-teal-700 disabled:opacity-50">
+                            className="flex-1 text-xs bg-green-600 text-white rounded px-2 py-1 hover:bg-green-700 disabled:opacity-50">
                             {editingItemSaving ? '…' : 'Save'}
                           </button>
                           <button onClick={() => setEditingItemId(null)}
@@ -320,7 +320,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                           <div className="flex items-center gap-1.5 mt-2">
                             {canWrite && item.status === 'ACTIVE' && (
                               <button onClick={() => { setEditingItemId(item.id); setEditingItemValue(item.english_value); setEditingItemUrl(item.s3_url || '') }}
-                                className="text-xs text-slate-400 hover:text-teal-600 px-1" title="Edit">✎</button>
+                                className="text-xs text-slate-400 hover:text-green-600 px-1" title="Edit">✎</button>
                             )}
                             {canWrite && (
                               <button onClick={() => toggleStatus(item)}
@@ -351,7 +351,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                           <input autoFocus value={editingItemValue}
                             onChange={e => setEditingItemValue(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter') saveItemEdit(); if (e.key === 'Escape') setEditingItemId(null) }}
-                            className="flex-1 text-sm border-b border-teal-400 focus:outline-none bg-transparent text-slate-800" />
+                            className="flex-1 text-sm border-b border-green-400 focus:outline-none bg-transparent text-slate-800" />
                         ) : (
                           <div className="min-w-0">
                             <span className="text-sm text-slate-800 truncate block">{item.english_value}</span>
@@ -368,7 +368,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                         {editingItemId === item.id ? (
                           <>
                             <button onClick={saveItemEdit} disabled={editingItemSaving}
-                              className="text-xs text-teal-600 hover:text-teal-800 font-medium">
+                              className="text-xs text-green-600 hover:text-green-800 font-medium">
                               {editingItemSaving ? '…' : '✓ Save'}
                             </button>
                             <button onClick={() => setEditingItemId(null)} className="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
@@ -381,7 +381,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                             )}
                             <span className="text-xs text-slate-400">{item.translations.length} trans.</span>
                             <button onClick={() => setExpandedItem(expandedItem === item.id ? null : item.id)}
-                              className="text-xs text-teal-600 hover:underline">
+                              className="text-xs text-green-600 hover:underline">
                               {expandedItem === item.id ? 'hide' : 'view'}
                             </button>
                             <button onClick={() => toggleStatus(item)}
@@ -434,7 +434,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
               <div className="flex flex-wrap gap-2">
                 {unusedLanguages.map(l => (
                   <button key={l.language_code} onClick={() => addLanguage(l.language_code)}
-                    className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 hover:border-teal-400 transition-colors">
+                    className="px-3 py-1.5 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 hover:border-green-400 transition-colors">
                     {l.language_name_en} ({l.language_code})
                   </button>
                 ))}
@@ -478,14 +478,14 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
           </div>
           <div className="bg-white border-2 border-dashed border-slate-300 rounded-xl p-8 text-center">
             <input type="file" accept=".csv" onChange={e => setUploadFile(e.target.files?.[0] || null)}
-              className="block w-full text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100" />
+              className="block w-full text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-green-50 file:text-green-700 hover:file:bg-green-100" />
           </div>
           {uploadFile && (
             <div className="mt-4">
               <p className="text-sm text-slate-600 mb-2">Selected: <strong>{uploadFile.name}</strong></p>
               <button onClick={uploadCsv}
                 disabled={uploading || !!(core.assigned_stocker_id && core.assigned_stocker_id !== getStoredUser()?.id)}
-                className="px-4 py-2 bg-teal-600 text-white text-sm rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2">
+                className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
                 {uploading && <LoadingSpinner size="sm" />}
                 {uploading ? 'Uploading…' : 'Upload CSV'}
               </button>
@@ -507,12 +507,12 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
             <p className="text-sm text-slate-500 mb-4">The Stocker responsible for adding and maintaining data in this Core.</p>
             <div className="flex gap-3 items-center">
               <select value={assignedStockerId} onChange={e => setAssignedStockerId(e.target.value)}
-                className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
                 <option value="">— Unassigned —</option>
                 {stockers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
               <button onClick={saveAssignment} disabled={savingAssignment}
-                className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2 flex-shrink-0">
+                className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 flex-shrink-0">
                 {savingAssignment && <LoadingSpinner size="sm" />} Save
               </button>
             </div>
@@ -558,7 +558,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                 <input autoFocus value={newValue} onChange={e => setNewValue(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !isMedia) addItem() }}
                   placeholder={isMedia ? 'e.g. Cotton — Vegetative — Leaf' : 'Enter value…'}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
               </div>
 
               {isMedia && (
@@ -566,11 +566,11 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                   {/* Mode toggle */}
                   <div className="flex gap-2 mb-3">
                     <button onClick={() => setAddImageMode('file')}
-                      className={`px-3 py-1.5 text-xs rounded-full border font-medium transition-colors ${addImageMode === 'file' ? 'bg-teal-600 text-white border-teal-600' : 'border-slate-300 text-slate-500 hover:border-slate-400'}`}>
+                      className={`px-3 py-1.5 text-xs rounded-full border font-medium transition-colors ${addImageMode === 'file' ? 'bg-green-600 text-white border-green-600' : 'border-slate-300 text-slate-500 hover:border-slate-400'}`}>
                       Upload file
                     </button>
                     <button onClick={() => setAddImageMode('url')}
-                      className={`px-3 py-1.5 text-xs rounded-full border font-medium transition-colors ${addImageMode === 'url' ? 'bg-teal-600 text-white border-teal-600' : 'border-slate-300 text-slate-500 hover:border-slate-400'}`}>
+                      className={`px-3 py-1.5 text-xs rounded-full border font-medium transition-colors ${addImageMode === 'url' ? 'bg-green-600 text-white border-green-600' : 'border-slate-300 text-slate-500 hover:border-slate-400'}`}>
                       Paste URL
                     </button>
                   </div>
@@ -579,7 +579,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                     <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center">
                       <input type="file" accept="image/*"
                         onChange={e => handleImageFileSelect(e.target.files?.[0] || null)}
-                        className="block w-full text-sm text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100" />
+                        className="block w-full text-sm text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-green-50 file:text-green-700 hover:file:bg-green-100" />
                       {newImageFile && <p className="text-xs text-slate-400 mt-1">{newImageFile.name} · {(newImageFile.size / 1024).toFixed(0)} KB</p>}
                     </div>
                   ) : (
@@ -588,7 +588,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                       <input value={newMediaUrl} onChange={e => setNewMediaUrl(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter') addItem() }}
                         placeholder="https://…"
-                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono text-xs" />
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 font-mono text-xs" />
                     </div>
                   )}
 
@@ -618,7 +618,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
 
               <div className="flex gap-3 pt-1">
                 <button onClick={addItem} disabled={saving || (!isMedia && !!exactMatch)}
-                  className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2 font-medium">
+                  className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 font-medium">
                   {saving && <LoadingSpinner size="sm" />} {saving && isMedia && addImageMode === 'file' ? 'Uploading…' : 'Save'}
                 </button>
                 <button onClick={() => { setShowAddItem(false); clearAddImageModal() }}

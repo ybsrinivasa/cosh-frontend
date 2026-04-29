@@ -134,7 +134,7 @@ export default function RegistriesPage() {
       <div className="flex gap-1 mb-6 border-b border-slate-200">
         {(['languages', 'reltypes', 'products'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${tab === t ? 'border-b-2 border-teal-600 text-teal-600' : 'text-slate-500 hover:text-slate-700'}`}>
+            className={`px-4 py-2 text-sm font-medium transition-colors ${tab === t ? 'border-b-2 border-green-600 text-green-600' : 'text-slate-500 hover:text-slate-700'}`}>
             {t === 'languages' ? `Languages (${languages.length})` : t === 'reltypes' ? `Rel Types (${relTypes.length})` : `Products (${products.length})`}
           </button>
         ))}
@@ -166,38 +166,38 @@ export default function RegistriesPage() {
         <div>
           {/* Create form */}
           {showCreate ? (
-            <div className="bg-white border border-teal-200 rounded-xl p-5 mb-4">
+            <div className="bg-white border border-green-200 rounded-xl p-5 mb-4">
               <h3 className="text-sm font-semibold text-slate-800 mb-4">New Relationship Type</h3>
               <div className="grid grid-cols-2 gap-3 max-w-2xl">
                 <div>
                   <label className="block text-xs font-medium text-slate-500 mb-1">Label <span className="text-red-400">*</span></label>
                   <input value={createForm.label} onChange={e => setCreateForm(f => ({ ...f, label: e.target.value }))}
                     placeholder="e.g. HAS_PART"
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-teal-500" />
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-green-500" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-500 mb-1">Display name <span className="text-red-400">*</span></label>
                   <input value={createForm.display_name} onChange={e => setCreateForm(f => ({ ...f, display_name: e.target.value }))}
                     placeholder="e.g. Has Part"
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-500 mb-1">Description</label>
                   <input value={createForm.description} onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))}
                     placeholder="What this relationship means"
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-500 mb-1">Example</label>
                   <input value={createForm.example} onChange={e => setCreateForm(f => ({ ...f, example: e.target.value }))}
                     placeholder="e.g. Wheel has part Tyre"
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
                 </div>
               </div>
               {createError && <p className="mt-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{createError}</p>}
               <div className="flex gap-3 mt-4">
                 <button onClick={submitCreate} disabled={creating}
-                  className="px-5 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 font-medium flex items-center gap-2">
+                  className="px-5 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium flex items-center gap-2">
                   {creating && <LoadingSpinner size="sm" />} Save
                 </button>
                 <button onClick={() => { setShowCreate(false); setCreateForm(emptyForm); setCreateError('') }}
@@ -209,7 +209,7 @@ export default function RegistriesPage() {
           ) : (
             <div className="mb-4">
               <button onClick={() => setShowCreate(true)}
-                className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium">
+                className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
                 + New Rel Type
               </button>
             </div>
@@ -224,12 +224,12 @@ export default function RegistriesPage() {
               <div key={rt.id} className="border-b border-slate-100 last:border-0">
                 {editingId === rt.id ? (
                   /* ── Edit row ── */
-                  <div className="px-5 py-4 bg-teal-50">
+                  <div className="px-5 py-4 bg-green-50">
                     <div className="grid grid-cols-2 gap-3 max-w-2xl mb-3">
                       <div>
                         <label className="block text-xs font-medium text-slate-500 mb-1">Label <span className="text-red-400">*</span></label>
                         <input value={editForm.label} onChange={e => setEditForm(f => ({ ...f, label: e.target.value }))}
-                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
                         {editForm.label !== rt.label && rt.usage_count > 0 && (
                           <p className="text-xs text-amber-600 mt-1">
                             ⚠ Used in {rt.usage_count} schema position{rt.usage_count !== 1 ? 's' : ''} — will be updated
@@ -239,23 +239,23 @@ export default function RegistriesPage() {
                       <div>
                         <label className="block text-xs font-medium text-slate-500 mb-1">Display name <span className="text-red-400">*</span></label>
                         <input value={editForm.display_name} onChange={e => setEditForm(f => ({ ...f, display_name: e.target.value }))}
-                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-slate-500 mb-1">Description</label>
                         <input value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
-                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-slate-500 mb-1">Example</label>
                         <input value={editForm.example} onChange={e => setEditForm(f => ({ ...f, example: e.target.value }))}
-                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white" />
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
                       </div>
                     </div>
                     {saveError && <p className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{saveError}</p>}
                     <div className="flex gap-3">
                       <button onClick={() => submitEdit(rt)} disabled={saving}
-                        className="px-4 py-1.5 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 font-medium flex items-center gap-2">
+                        className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium flex items-center gap-2">
                         {saving && <LoadingSpinner size="sm" />} Save
                       </button>
                       <button onClick={cancelEdit}
@@ -269,7 +269,7 @@ export default function RegistriesPage() {
                   <div className="flex items-start justify-between px-5 py-3 hover:bg-slate-50 group">
                     <div className="flex-1">
                       <div className="flex items-center gap-3">
-                        <code className="text-sm font-mono bg-slate-100 px-2 py-0.5 rounded text-teal-700">{rt.label}</code>
+                        <code className="text-sm font-mono bg-slate-100 px-2 py-0.5 rounded text-green-700">{rt.label}</code>
                         <span className="text-sm text-slate-700">{rt.display_name}</span>
                         {rt.usage_count > 0 && (
                           <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
@@ -285,7 +285,7 @@ export default function RegistriesPage() {
                       )}
                     </div>
                     <button onClick={() => startEdit(rt)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-teal-600 text-base px-2 ml-2 flex-shrink-0"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-green-600 text-base px-2 ml-2 flex-shrink-0"
                       title="Edit">✎</button>
                   </div>
                 )}

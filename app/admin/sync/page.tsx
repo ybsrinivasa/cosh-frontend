@@ -83,7 +83,7 @@ export default function SyncPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         {products.map(p => (
           <button key={p.product_id} onClick={() => selectProduct(p.product_id)}
-            className={`text-left p-4 rounded-xl border transition-colors ${selected === p.product_id ? 'border-teal-500 bg-teal-50' : 'bg-white border-slate-200 hover:border-teal-300'}`}>
+            className={`text-left p-4 rounded-xl border transition-colors ${selected === p.product_id ? 'border-green-500 bg-green-50' : 'bg-white border-slate-200 hover:border-green-300'}`}>
             <p className="font-medium text-slate-800">{p.product_name}</p>
             <p className="text-sm text-slate-500 mt-1">
               {p.pending_changes} pending change{p.pending_changes !== 1 ? 's' : ''}
@@ -108,7 +108,7 @@ export default function SyncPage() {
                   <button onClick={() => {
                     const all = new Set(changeTable.entities.map(e => e.entity_id))
                     setSelectedEntities(selectedEntities.size === all.size ? new Set() : all)
-                  }} className="text-sm text-teal-600 hover:underline">
+                  }} className="text-sm text-green-600 hover:underline">
                     {selectedEntities.size === (changeTable?.entities.length || 0) ? 'Deselect all' : 'Select all'}
                   </button>
                 )}
@@ -120,10 +120,10 @@ export default function SyncPage() {
               ) : (
                 changeTable.entities.map(entity => (
                   <div key={entity.entity_id} onClick={() => toggleEntity(entity.entity_id)}
-                    className={`flex items-center justify-between px-5 py-3 border-b border-slate-100 last:border-0 cursor-pointer transition-colors ${selectedEntities.has(entity.entity_id) ? 'bg-teal-50' : 'hover:bg-slate-50'}`}>
+                    className={`flex items-center justify-between px-5 py-3 border-b border-slate-100 last:border-0 cursor-pointer transition-colors ${selectedEntities.has(entity.entity_id) ? 'bg-green-50' : 'hover:bg-slate-50'}`}>
                     <div className="flex items-center gap-3">
                       <input type="checkbox" readOnly checked={selectedEntities.has(entity.entity_id)}
-                        className="rounded border-slate-300 text-teal-600" />
+                        className="rounded border-slate-300 text-green-600" />
                       <div>
                         <p className="text-sm font-medium text-slate-800">{entity.entity_name}</p>
                         <div className="flex gap-1 mt-0.5">
@@ -148,7 +148,7 @@ export default function SyncPage() {
                 <div className="grid grid-cols-2 gap-2">
                   {(['INCREMENTAL', 'FULL'] as const).map(mode => (
                     <button key={mode} onClick={() => setSyncMode(mode)}
-                      className={`py-2 text-sm rounded-lg border transition-colors ${syncMode === mode ? 'border-teal-500 bg-teal-50 text-teal-700 font-medium' : 'border-slate-200 text-slate-600 hover:border-teal-300'}`}>
+                      className={`py-2 text-sm rounded-lg border transition-colors ${syncMode === mode ? 'border-green-500 bg-green-50 text-green-700 font-medium' : 'border-slate-200 text-slate-600 hover:border-green-300'}`}>
                       {mode === 'FULL' ? 'Full' : 'Incremental'}
                     </button>
                   ))}
@@ -164,7 +164,7 @@ export default function SyncPage() {
               )}
               <button onClick={dispatch}
                 disabled={dispatching || (syncMode === 'INCREMENTAL' && selectedEntities.size === 0)}
-                className="w-full py-2 bg-teal-600 text-white text-sm rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                className="w-full py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2">
                 {dispatching && <LoadingSpinner size="sm" />}
                 {dispatching ? 'Dispatching…' : 'Dispatch Sync'}
               </button>

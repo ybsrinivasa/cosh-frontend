@@ -83,11 +83,11 @@ export default function Combobox({
           disabled={disabled}
           placeholder={loading ? 'Loading…' : placeholder}
           autoComplete="off"
-          className={`w-full rounded-lg px-3 py-2 text-sm pr-8 border focus:outline-none focus:ring-2 focus:ring-teal-500 transition-colors ${
+          className={`w-full rounded-lg px-3 py-2 text-sm pr-8 border focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors ${
             disabled
               ? 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed'
               : value
-              ? 'border-teal-400 bg-teal-50 text-slate-800 font-medium'
+              ? 'border-green-400 bg-green-50 text-slate-800 font-medium'
               : 'border-slate-300 bg-white text-slate-700'
           }`}
         />
@@ -130,7 +130,7 @@ export default function Combobox({
                     onMouseDown={e => { e.preventDefault(); handleSelect(item) }}
                     className={`w-full text-left px-4 py-2.5 text-sm transition-colors border-b border-slate-50 last:border-0 ${
                       item.id === value
-                        ? 'bg-teal-50 text-teal-800 font-semibold'
+                        ? 'bg-green-50 text-green-800 font-semibold'
                         : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
                     }`}
                   >

@@ -67,7 +67,7 @@ export default function UsersPage() {
         subtitle={`${users.length} user${users.length !== 1 ? 's' : ''}`}
         action={
           <button onClick={() => { setShowModal(true); setError('') }}
-            className="px-3 py-1.5 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium">
+            className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
             + New User
           </button>
         }
@@ -102,26 +102,26 @@ export default function UsersPage() {
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
               <input type="email" autoFocus value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                 placeholder="user@example.com" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
               <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                 placeholder="Full name" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
               <input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Roles</label>
               <div className="flex gap-2 flex-wrap">
                 {ROLES.map(role => (
                   <button key={role} onClick={() => toggleRole(role)}
-                    className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${form.roles.includes(role) ? 'border-teal-500 bg-teal-50 text-teal-700' : 'border-slate-200 text-slate-600 hover:border-teal-300'}`}>
+                    className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${form.roles.includes(role) ? 'border-green-500 bg-green-50 text-green-700' : 'border-slate-200 text-slate-600 hover:border-green-300'}`}>
                     {role}
                   </button>
                 ))}
@@ -131,7 +131,7 @@ export default function UsersPage() {
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-slate-600">Cancel</button>
               <button onClick={create} disabled={saving || !form.email || !form.password || form.roles.length === 0}
-                className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2">
+                className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
                 {saving && <LoadingSpinner size="sm" />} Create User
               </button>
             </div>

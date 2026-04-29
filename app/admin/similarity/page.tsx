@@ -117,7 +117,7 @@ export default function SimilarityPage() {
                   </div>
                 </div>
                 <button onClick={() => { setActivePair(pair); setAction(''); setRemoveItemId(''); setCanonicalValue('') }}
-                  className="px-3 py-1.5 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 flex-shrink-0">
+                  className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 flex-shrink-0">
                   Review
                 </button>
               </div>
@@ -150,7 +150,7 @@ export default function SimilarityPage() {
                   { value: 'IGNORED', label: 'Ignore', desc: 'Dismiss permanently' },
                 ].map(opt => (
                   <button key={opt.value} onClick={() => setAction(opt.value)}
-                    className={`p-3 rounded-lg border text-left transition-colors ${action === opt.value ? 'border-teal-500 bg-teal-50' : 'border-slate-200 hover:border-teal-300'}`}>
+                    className={`p-3 rounded-lg border text-left transition-colors ${action === opt.value ? 'border-green-500 bg-green-50' : 'border-slate-200 hover:border-green-300'}`}>
                     <p className="text-sm font-medium text-slate-800">{opt.label}</p>
                     <p className="text-xs text-slate-500 mt-0.5">{opt.desc}</p>
                   </button>
@@ -178,7 +178,7 @@ export default function SimilarityPage() {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Canonical value (item A will be updated to this)</label>
                 <input value={canonicalValue} onChange={e => setCanonicalValue(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                   placeholder="Type the correct value…" />
               </div>
             )}
@@ -186,7 +186,7 @@ export default function SimilarityPage() {
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setActivePair(null)} className="px-4 py-2 text-sm text-slate-600">Cancel</button>
               <button onClick={submitReview} disabled={submitting || !action || (action === 'REMOVE_ONE' && !removeItemId) || (action === 'MERGED' && !canonicalValue)}
-                className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2">
+                className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
                 {submitting && <LoadingSpinner size="sm" />} Confirm
               </button>
             </div>

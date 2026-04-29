@@ -91,7 +91,7 @@ export default function FoldersPage() {
               + New Core
             </button>
             <button onClick={() => { setShowFolderModal(true); setError('') }}
-              className="px-3 py-1.5 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium">
+              className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
               + New Folder
             </button>
           </div>
@@ -110,7 +110,7 @@ export default function FoldersPage() {
                     onChange={e => setEditingFolderName(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') renameFolder(folder.id); if (e.key === 'Escape') setEditingFolderId(null) }}
                     onClick={e => e.stopPropagation()}
-                    className="font-medium text-slate-800 bg-white border border-teal-400 rounded px-2 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-teal-500" />
+                    className="font-medium text-slate-800 bg-white border border-green-400 rounded px-2 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-500" />
                 ) : (
                   <span className="font-medium text-slate-800">📁 {folder.name}</span>
                 )}
@@ -119,7 +119,7 @@ export default function FoldersPage() {
               {hasRole(getStoredUser(), 'DESIGNER', 'ADMIN') && (
                 editingFolderId === folder.id ? (
                   <div className="flex gap-1">
-                    <button onClick={() => renameFolder(folder.id)} className="text-xs text-teal-600 hover:text-teal-800 px-2 py-1">✓</button>
+                    <button onClick={() => renameFolder(folder.id)} className="text-xs text-green-600 hover:text-green-800 px-2 py-1">✓</button>
                     <button onClick={() => setEditingFolderId(null)} className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1">✕</button>
                   </div>
                 ) : (
@@ -174,14 +174,14 @@ export default function FoldersPage() {
               <label className="block text-sm font-medium text-slate-700 mb-1">Folder name</label>
               <input autoFocus value={newFolderName} onChange={e => setNewFolderName(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && createFolder()}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                 placeholder="e.g. Crops & Varieties" />
             </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setShowFolderModal(false)} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Cancel</button>
               <button onClick={createFolder} disabled={saving || !newFolderName.trim()}
-                className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2">
+                className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
                 {saving && <LoadingSpinner size="sm" />} Create Folder
               </button>
             </div>
@@ -195,13 +195,13 @@ export default function FoldersPage() {
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Core name</label>
               <input autoFocus value={newCore.name} onChange={e => setNewCore({ ...newCore, name: e.target.value })}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                 placeholder="e.g. Crops" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Folder</label>
               <select value={newCore.folder_id} onChange={e => setNewCore({ ...newCore, folder_id: e.target.value })}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
                 <option value="">Select folder…</option>
                 {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
@@ -210,7 +210,7 @@ export default function FoldersPage() {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>
                 <select value={newCore.core_type} onChange={e => setNewCore({ ...newCore, core_type: e.target.value })}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
                   <option value="TEXT">TEXT</option>
                   <option value="MEDIA">MEDIA</option>
                 </select>
@@ -219,7 +219,7 @@ export default function FoldersPage() {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Content type</label>
                   <select value={newCore.content_type} onChange={e => setNewCore({ ...newCore, content_type: e.target.value })}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
                     <option value="IMAGE">Image</option>
                     <option value="VIDEO">Video</option>
                     <option value="AUDIO">Audio</option>
@@ -230,7 +230,7 @@ export default function FoldersPage() {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Language mode</label>
                   <select value={newCore.language_mode} onChange={e => setNewCore({ ...newCore, language_mode: e.target.value })}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
                     <option value="TRANSLATION">Translation</option>
                     <option value="TRANSLITERATION">Transliteration</option>
                   </select>
@@ -240,14 +240,14 @@ export default function FoldersPage() {
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Description (optional)</label>
               <input value={newCore.description} onChange={e => setNewCore({ ...newCore, description: e.target.value })}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                 placeholder="Brief description" />
             </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setShowCoreModal(false)} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Cancel</button>
               <button onClick={createCore} disabled={saving || !newCore.name.trim() || !newCore.folder_id}
-                className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2">
+                className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
                 {saving && <LoadingSpinner size="sm" />} Create Core
               </button>
             </div>
