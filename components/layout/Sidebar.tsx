@@ -107,8 +107,8 @@ export default function Sidebar() {
         )}
       </nav>
 
-      {/* User footer — sign out first so it's never buried at screen edge */}
-      <div className="px-4 pt-3 pb-6 border-t border-green-900/60">
+      {/* User footer — pb-14 clears any fixed browser-extension buttons at the bottom edge */}
+      <div className="px-4 pt-3 pb-14 border-t border-green-900/60">
         <button
           onClick={logout}
           className="w-full text-left text-xs text-green-600 hover:text-green-300 transition-colors mb-3"
