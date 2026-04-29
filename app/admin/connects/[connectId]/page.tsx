@@ -303,14 +303,16 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
         />
       </div>
 
-      {/* Tabs */}
+      {/* Tabs — Settings hidden for Stockers */}
       <div className="flex gap-1 mb-6 border-b border-slate-200">
-        {(['schema', 'data', 'upload', 'settings'] as const).map(t => (
+        {(['schema', 'data', 'upload', 'settings'] as const)
+          .filter(t => !(t === 'settings' && connect.assigned_stocker_id === getStoredUser()?.id))
+          .map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-medium transition-colors ${tab === t ? 'border-b-2 border-teal-600 text-teal-600' : 'text-slate-500 hover:text-slate-700'}`}>
             {t === 'schema' ? 'Schema' : t === 'data' ? `Data (${items.length})` : t === 'upload' ? 'Excel Upload' : 'Settings'}
           </button>
-        ))}
+          ))}
       </div>
 
       {/* ── Schema tab ──────────────────────────────────────────────────────── */}

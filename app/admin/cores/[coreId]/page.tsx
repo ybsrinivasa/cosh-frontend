@@ -40,7 +40,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
       const [c, i, l, al, st] = await Promise.all([
         api.get(`/cores/${coreId}`),
         api.get(`/cores/${coreId}/items`),
-        api.get(`/cores/${coreId}/languages`),
+        api.get(`/cores/${coreId}/languages`).catch(() => ({ data: [] })),
         api.get('/admin/registries/languages').catch(() => ({ data: [] })),
         api.get('/admin/users/by-role/STOCKER').catch(() => ({ data: [] })),
       ])
@@ -133,14 +133,16 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
         />
       </div>
 
-      {/* Tabs */}
+      {/* Tabs — Settings hidden for Stockers */}
       <div className="flex gap-1 mb-6 border-b border-slate-200">
-        {(['items', 'languages', 'upload', 'settings'] as const).map(t => (
+        {(['items', 'languages', 'upload', 'settings'] as const)
+          .filter(t => !(t === 'settings' && core.assigned_stocker_id === getStoredUser()?.id))
+          .map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${tab === t ? 'border-b-2 border-teal-600 text-teal-600' : 'text-slate-500 hover:text-slate-700'}`}>
             {t === 'items' ? `Items (${items.length})` : t === 'languages' ? `Languages (${languages.length})` : t === 'upload' ? 'CSV Upload' : 'Settings'}
           </button>
-        ))}
+          ))}
       </div>
 
       {/* Items tab */}
