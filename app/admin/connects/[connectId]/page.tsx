@@ -2,6 +2,7 @@
 import { useState, useEffect, use, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { getStoredUser, hasRole } from '@/lib/auth'
+import { formatDate } from '@/lib/format'
 import api from '@/lib/api'
 import type { Connect, SchemaPosition, ConnectDataItem, Core, RelationshipType } from '@/types'
 import PageHeader from '@/components/ui/PageHeader'
@@ -549,6 +550,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                               {p.core_name || `Position ${p.position_number}`}
                             </th>
                           ))}
+                          <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500">Entered by</th>
                           <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500">Status</th>
                         </tr>
                       </thead>
@@ -565,6 +567,12 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                                 <td key={p.id} className="px-4 py-3 text-slate-800 font-medium">{label}</td>
                               )
                             })}
+                            <td className="px-4 py-3">
+                              <div>
+                                <p className="text-sm text-slate-700">{item.created_by_name || '—'}</p>
+                                <p className="text-xs text-slate-400">{formatDate(item.created_at)}</p>
+                              </div>
+                            </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2">
                                 <Badge label={item.status} variant={item.status} />

@@ -79,6 +79,7 @@ export interface CoreDataItem {
   english_value: string
   status: Status
   legacy_item_id: string | null
+  created_by_name: string | null
   created_at: string
   translations: Translation[]
 }
@@ -124,6 +125,7 @@ export interface ConnectDataItem {
   id: string
   connect_id: string
   status: Status
+  created_by_name: string | null
   created_at: string
   positions: ConnectDataPosition[]
 }

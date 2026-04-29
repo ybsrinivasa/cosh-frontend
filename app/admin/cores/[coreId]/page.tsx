@@ -3,6 +3,7 @@ import { useState, useEffect, use } from 'react'
 import api from '@/lib/api'
 import type { Core, CoreDataItem, CoreLanguageConfig, Language } from '@/types'
 import { getStoredUser, hasRole } from '@/lib/auth'
+import { formatDate } from '@/lib/format'
 
 interface StockerUser { id: string; name: string; email: string }
 import PageHeader from '@/components/ui/PageHeader'
@@ -224,7 +225,12 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                           onKeyDown={e => { if (e.key === 'Enter') saveItemEdit(); if (e.key === 'Escape') setEditingItemId(null) }}
                           className="flex-1 text-sm border-b border-teal-400 focus:outline-none bg-transparent text-slate-800" />
                       ) : (
-                        <span className="text-sm text-slate-800 truncate">{item.english_value}</span>
+                        <div className="min-w-0">
+                          <span className="text-sm text-slate-800 truncate block">{item.english_value}</span>
+                          <span className="text-xs text-slate-400">
+                            {item.created_by_name ? `${item.created_by_name} · ` : ''}{formatDate(item.created_at)}
+                          </span>
+                        </div>
                       )}
                       {item.legacy_item_id && (
                         <span className="text-xs text-slate-400 font-mono hidden sm:inline">{item.legacy_item_id}</span>
