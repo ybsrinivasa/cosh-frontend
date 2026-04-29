@@ -162,6 +162,7 @@ export interface RelationshipType {
   display_name: string
   description: string | null
   example: string | null
+  usage_count: number
 }
 
 export interface Product {
