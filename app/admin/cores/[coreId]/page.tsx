@@ -27,6 +27,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
   const [search, setSearch] = useState('')
   const [showAddItem, setShowAddItem] = useState(false)
   const [newValue, setNewValue] = useState('')
+  const [newMediaUrl, setNewMediaUrl] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [uploadFile, setUploadFile] = useState<File | null>(null)
@@ -38,7 +39,10 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
   const [editedCoreName, setEditedCoreName] = useState('')
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [editingItemValue, setEditingItemValue] = useState('')
+  const [editingItemUrl, setEditingItemUrl] = useState('')
   const [editingItemSaving, setEditingItemSaving] = useState(false)
+  // MEDIA lightbox
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
   useEffect(() => { load() }, [coreId])
 
@@ -57,12 +61,19 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
     } finally { setLoading(false) }
   }
 
+  const isMedia = core?.core_type === 'MEDIA'
+  const canWrite = !core?.assigned_stocker_id || core?.assigned_stocker_id === getStoredUser()?.id
+
   async function addItem() {
     if (!newValue.trim()) return
+    if (isMedia && !newMediaUrl.trim()) { setError('Image URL is required'); return }
     setSaving(true); setError('')
     try {
-      await api.post(`/cores/${coreId}/items`, { english_value: newValue.trim() })
-      setNewValue(''); setShowAddItem(false); load()
+      await api.post(`/cores/${coreId}/items`, {
+        english_value: newValue.trim(),
+        ...(isMedia ? { s3_url: newMediaUrl.trim() } : {}),
+      })
+      setNewValue(''); setNewMediaUrl(''); setShowAddItem(false); load()
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } }
       setError(err.response?.data?.detail || 'Failed to add item')
@@ -73,11 +84,9 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
     setSavingAssignment(true); setAssignmentMsg('')
     try {
       await api.put(`/cores/${coreId}`, { assigned_stocker_id: assignedStockerId || null })
-      setAssignmentMsg('✓ Saved')
-      load()
-    } catch {
-      setAssignmentMsg('✗ Failed to save')
-    } finally { setSavingAssignment(false) }
+      setAssignmentMsg('✓ Saved'); load()
+    } catch { setAssignmentMsg('✗ Failed to save') }
+    finally { setSavingAssignment(false) }
   }
 
   async function renameCore() {
@@ -95,7 +104,10 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
     if (!editingItemValue.trim() || !editingItemId) return
     setEditingItemSaving(true)
     try {
-      await api.put(`/cores/${coreId}/items/${editingItemId}`, { english_value: editingItemValue.trim() })
+      await api.put(`/cores/${coreId}/items/${editingItemId}`, {
+        english_value: editingItemValue.trim(),
+        ...(isMedia ? { s3_url: editingItemUrl.trim() || undefined } : {}),
+      })
       setEditingItemId(null); load()
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } }
@@ -128,7 +140,12 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
       const { data } = await api.post(`/cores/${coreId}/items/upload-csv`, form, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
-      setUploadResult(`✓ Created: ${data.created} | Skipped: ${data.skipped_duplicates} | Translations: ${data.translations_imported} | Errors: ${data.errors.length}`)
+      if (isMedia) {
+        setUploadResult(`✓ Added: ${data.created} | Skipped (already exist): ${data.skipped_duplicates} | Errors: ${data.errors.length}`)
+      } else {
+        setUploadResult(`✓ Created: ${data.created} | Skipped: ${data.skipped_duplicates} | Translations: ${data.translations_imported} | Errors: ${data.errors.length}`)
+      }
+      if (data.errors?.length) setUploadResult(prev => prev + '\n' + data.errors.join('\n'))
       load()
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } }
@@ -149,6 +166,15 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
 
   return (
     <div>
+      {/* Lightbox */}
+      {lightboxUrl && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setLightboxUrl(null)}>
+          <img src={lightboxUrl} alt="Preview" className="max-w-full max-h-full rounded-lg shadow-2xl object-contain" />
+          <button className="absolute top-4 right-4 text-white text-2xl hover:text-slate-300">✕</button>
+        </div>
+      )}
+
       <div className="mb-6">
         <Link href="/admin/folders" className="text-sm text-teal-600 hover:underline">← Folders</Link>
         {editingCoreName ? (
@@ -162,7 +188,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
         ) : (
           <PageHeader
             title={core.name}
-            subtitle={`${core.core_type} Core · ${items.length} items · ${languages.length} language${languages.length !== 1 ? 's' : ''}`}
+            subtitle={`${core.core_type} Core · ${items.length} item${items.length !== 1 ? 's' : ''}${!isMedia ? ` · ${languages.length} language${languages.length !== 1 ? 's' : ''}` : ''}`}
             action={
               <div className="flex gap-2 items-center">
                 {hasRole(getStoredUser(), 'DESIGNER', 'ADMIN') && (
@@ -177,115 +203,180 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
         )}
       </div>
 
-      {/* Tabs — Settings hidden for Stockers */}
+      {/* Tabs */}
       <div className="flex gap-1 mb-6 border-b border-slate-200">
-        {(['items', 'languages', 'upload', 'settings'] as const)
+        {(['items', ...(isMedia ? [] : ['languages']), 'upload', 'settings'] as const)
           .filter(t => !(t === 'settings' && core.assigned_stocker_id === getStoredUser()?.id))
           .map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${tab === t ? 'border-b-2 border-teal-600 text-teal-600' : 'text-slate-500 hover:text-slate-700'}`}>
-            {t === 'items' ? `Items (${items.length})` : t === 'languages' ? `Languages (${languages.length})` : t === 'upload' ? 'CSV Upload' : 'Settings'}
-          </button>
+            <button key={t} onClick={() => setTab(t as typeof tab)}
+              className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${tab === t ? 'border-b-2 border-teal-600 text-teal-600' : 'text-slate-500 hover:text-slate-700'}`}>
+              {t === 'items' ? `${isMedia ? 'Images' : 'Items'} (${items.length})` : t === 'languages' ? `Languages (${languages.length})` : t === 'upload' ? 'CSV Upload' : 'Settings'}
+            </button>
           ))}
       </div>
 
-      {/* Items tab */}
+      {/* ── Items / Images tab ─────────────────────────────────────────────── */}
       {tab === 'items' && (
         <div>
-          {/* Read-only banner when Core is assigned to another user */}
           {core.assigned_stocker_id && core.assigned_stocker_id !== getStoredUser()?.id && (
             <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
-              🔒 <span>This Core is assigned to a Stocker for data entry. You can view the data but cannot add or edit items.</span>
+              🔒 <span>This Core is assigned to a Stocker. You can view but not add or edit.</span>
             </div>
           )}
+
           <div className="flex gap-3 mb-4">
             <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search items…"
+              placeholder={isMedia ? 'Search by name…' : 'Search items…'}
               className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
-            {(!core.assigned_stocker_id || core.assigned_stocker_id === getStoredUser()?.id) && (
+            {canWrite && (
               <button onClick={() => { setShowAddItem(true); setError('') }}
                 className="px-3 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium">
-                + Add Item
+                + {isMedia ? 'Add Image' : 'Add Item'}
               </button>
             )}
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-            {filtered.length === 0 ? (
-              <p className="text-center py-10 text-slate-400 text-sm">No items found</p>
+          {isMedia ? (
+            /* ── Image grid ───────────────────────────────────────────────── */
+            filtered.length === 0 ? (
+              <p className="text-center py-10 text-slate-400 text-sm">No images found</p>
             ) : (
-              filtered.map((item, idx) => (
-                <div key={item.id} className={`border-b border-slate-100 last:border-0 ${item.status === 'INACTIVE' ? 'opacity-50' : ''}`}>
-                  <div className="flex items-center justify-between px-4 py-3 hover:bg-slate-50">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <span className="text-xs text-slate-400 w-6 flex-shrink-0">{idx + 1}</span>
-                      {editingItemId === item.id ? (
-                        <input autoFocus value={editingItemValue}
-                          onChange={e => setEditingItemValue(e.target.value)}
-                          onKeyDown={e => { if (e.key === 'Enter') saveItemEdit(); if (e.key === 'Escape') setEditingItemId(null) }}
-                          className="flex-1 text-sm border-b border-teal-400 focus:outline-none bg-transparent text-slate-800" />
-                      ) : (
-                        <div className="min-w-0">
-                          <span className="text-sm text-slate-800 truncate block">{item.english_value}</span>
-                          <span className="text-xs text-slate-400">
-                            {item.created_by_name ? `${item.created_by_name} · ` : ''}{formatDate(item.created_at)}
-                          </span>
-                        </div>
-                      )}
-                      {item.legacy_item_id && (
-                        <span className="text-xs text-slate-400 font-mono hidden sm:inline">{item.legacy_item_id}</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      {editingItemId === item.id ? (
-                        <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {filtered.map(item => (
+                  <div key={item.id} className={`bg-white border border-slate-200 rounded-xl overflow-hidden group ${item.status === 'INACTIVE' ? 'opacity-50' : ''}`}>
+                    {editingItemId === item.id ? (
+                      /* Edit mode */
+                      <div className="p-3 space-y-2">
+                        <input autoFocus value={editingItemValue} onChange={e => setEditingItemValue(e.target.value)}
+                          placeholder="Name"
+                          className="w-full text-xs border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-teal-500" />
+                        <input value={editingItemUrl} onChange={e => setEditingItemUrl(e.target.value)}
+                          placeholder="Image URL"
+                          className="w-full text-xs border border-slate-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-teal-500" />
+                        <div className="flex gap-2">
                           <button onClick={saveItemEdit} disabled={editingItemSaving}
-                            className="text-xs text-teal-600 hover:text-teal-800 font-medium">
-                            {editingItemSaving ? '…' : '✓ Save'}
+                            className="flex-1 text-xs bg-teal-600 text-white rounded px-2 py-1 hover:bg-teal-700 disabled:opacity-50">
+                            {editingItemSaving ? '…' : 'Save'}
                           </button>
-                          <button onClick={() => setEditingItemId(null)} className="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
-                        </>
-                      ) : (
-                        <>
-                          {(!core.assigned_stocker_id || core.assigned_stocker_id === getStoredUser()?.id) && item.status === 'ACTIVE' && (
-                            <button onClick={() => { setEditingItemId(item.id); setEditingItemValue(item.english_value) }}
-                              className="text-slate-300 hover:text-slate-600 text-sm" title="Edit value">✎</button>
-                          )}
-                          <span className="text-xs text-slate-400">{item.translations.length} trans.</span>
-                          <button onClick={() => setExpandedItem(expandedItem === item.id ? null : item.id)}
-                            className="text-xs text-teal-600 hover:underline">
-                            {expandedItem === item.id ? 'hide' : 'view'}
-                          </button>
-                          <button onClick={() => toggleStatus(item)}
-                            className={`text-xs px-2 py-0.5 rounded border transition-colors ${item.status === 'ACTIVE' ? 'border-red-200 text-red-500 hover:bg-red-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'}`}>
-                            {item.status === 'ACTIVE' ? 'Inactivate' : 'Activate'}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  {expandedItem === item.id && item.translations.length > 0 && (
-                    <div className="px-4 pb-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {item.translations.map(t => (
-                        <div key={t.id} className="bg-slate-50 rounded-lg px-3 py-2">
-                          <div className="flex items-center justify-between mb-0.5">
-                            <span className="text-xs font-mono text-slate-500">{t.language_code}</span>
-                            <Badge label={t.validation_status === 'EXPERT_VALIDATED' ? 'Expert' : 'Machine'} variant={t.validation_status} />
-                          </div>
-                          <p className="text-sm text-slate-800">{t.translated_value}</p>
+                          <button onClick={() => setEditingItemId(null)}
+                            className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1">Cancel</button>
                         </div>
-                      ))}
+                      </div>
+                    ) : (
+                      <>
+                        {/* Thumbnail */}
+                        <div className="aspect-square bg-slate-100 relative cursor-pointer"
+                          onClick={() => item.s3_url && setLightboxUrl(item.s3_url)}>
+                          {item.s3_url ? (
+                            <img src={item.s3_url} alt={item.english_value}
+                              className="w-full h-full object-cover"
+                              onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-slate-300 text-3xl">🖼</div>
+                          )}
+                        </div>
+                        {/* Caption + actions */}
+                        <div className="p-2">
+                          <p className="text-xs text-slate-700 font-medium truncate" title={item.english_value}>{item.english_value}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">{item.created_by_name || ''}</p>
+                          <div className="flex items-center gap-1.5 mt-2">
+                            {canWrite && item.status === 'ACTIVE' && (
+                              <button onClick={() => { setEditingItemId(item.id); setEditingItemValue(item.english_value); setEditingItemUrl(item.s3_url || '') }}
+                                className="text-xs text-slate-400 hover:text-teal-600 px-1" title="Edit">✎</button>
+                            )}
+                            {canWrite && (
+                              <button onClick={() => toggleStatus(item)}
+                                className={`text-xs px-1.5 py-0.5 rounded border transition-colors ${item.status === 'ACTIVE' ? 'border-red-200 text-red-500 hover:bg-red-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'}`}>
+                                {item.status === 'ACTIVE' ? 'Inactivate' : 'Activate'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
+          ) : (
+            /* ── Text list ────────────────────────────────────────────────── */
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+              {filtered.length === 0 ? (
+                <p className="text-center py-10 text-slate-400 text-sm">No items found</p>
+              ) : (
+                filtered.map((item, idx) => (
+                  <div key={item.id} className={`border-b border-slate-100 last:border-0 ${item.status === 'INACTIVE' ? 'opacity-50' : ''}`}>
+                    <div className="flex items-center justify-between px-4 py-3 hover:bg-slate-50">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <span className="text-xs text-slate-400 w-6 flex-shrink-0">{idx + 1}</span>
+                        {editingItemId === item.id ? (
+                          <input autoFocus value={editingItemValue}
+                            onChange={e => setEditingItemValue(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') saveItemEdit(); if (e.key === 'Escape') setEditingItemId(null) }}
+                            className="flex-1 text-sm border-b border-teal-400 focus:outline-none bg-transparent text-slate-800" />
+                        ) : (
+                          <div className="min-w-0">
+                            <span className="text-sm text-slate-800 truncate block">{item.english_value}</span>
+                            <span className="text-xs text-slate-400">
+                              {item.created_by_name ? `${item.created_by_name} · ` : ''}{formatDate(item.created_at)}
+                            </span>
+                          </div>
+                        )}
+                        {item.legacy_item_id && (
+                          <span className="text-xs text-slate-400 font-mono hidden sm:inline">{item.legacy_item_id}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {editingItemId === item.id ? (
+                          <>
+                            <button onClick={saveItemEdit} disabled={editingItemSaving}
+                              className="text-xs text-teal-600 hover:text-teal-800 font-medium">
+                              {editingItemSaving ? '…' : '✓ Save'}
+                            </button>
+                            <button onClick={() => setEditingItemId(null)} className="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
+                          </>
+                        ) : (
+                          <>
+                            {canWrite && item.status === 'ACTIVE' && (
+                              <button onClick={() => { setEditingItemId(item.id); setEditingItemValue(item.english_value) }}
+                                className="text-slate-300 hover:text-slate-600 text-sm" title="Edit value">✎</button>
+                            )}
+                            <span className="text-xs text-slate-400">{item.translations.length} trans.</span>
+                            <button onClick={() => setExpandedItem(expandedItem === item.id ? null : item.id)}
+                              className="text-xs text-teal-600 hover:underline">
+                              {expandedItem === item.id ? 'hide' : 'view'}
+                            </button>
+                            <button onClick={() => toggleStatus(item)}
+                              className={`text-xs px-2 py-0.5 rounded border transition-colors ${item.status === 'ACTIVE' ? 'border-red-200 text-red-500 hover:bg-red-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'}`}>
+                              {item.status === 'ACTIVE' ? 'Inactivate' : 'Activate'}
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
+                    {expandedItem === item.id && item.translations.length > 0 && (
+                      <div className="px-4 pb-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {item.translations.map(t => (
+                          <div key={t.id} className="bg-slate-50 rounded-lg px-3 py-2">
+                            <div className="flex items-center justify-between mb-0.5">
+                              <span className="text-xs font-mono text-slate-500">{t.language_code}</span>
+                              <Badge label={t.validation_status === 'EXPERT_VALIDATED' ? 'Expert' : 'Machine'} variant={t.validation_status} />
+                            </div>
+                            <p className="text-sm text-slate-800">{t.translated_value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Languages tab */}
-      {tab === 'languages' && (
+      {/* ── Languages tab (TEXT only) ─────────────────────────────────────── */}
+      {tab === 'languages' && !isMedia && (
         <div>
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-4">
             {languages.length === 0 ? (
@@ -315,7 +406,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
         </div>
       )}
 
-      {/* CSV Upload tab */}
+      {/* ── CSV Upload tab ────────────────────────────────────────────────── */}
       {tab === 'upload' && (
         <div className="max-w-lg">
           {core.assigned_stocker_id && core.assigned_stocker_id !== getStoredUser()?.id && (
@@ -324,9 +415,23 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
             </div>
           )}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 text-sm text-blue-800">
-            <p className="font-medium mb-1">CSV format</p>
-            <p>Required column: <code className="bg-blue-100 px-1 rounded">english_value</code></p>
-            <p>Optional: <code className="bg-blue-100 px-1 rounded">legacy_id</code>, language value columns e.g. <code className="bg-blue-100 px-1 rounded">hi_value</code>, <code className="bg-blue-100 px-1 rounded">hi_validation_status</code></p>
+            <p className="font-medium mb-1">CSV format{isMedia ? ' — Image Core' : ''}</p>
+            {isMedia ? (
+              <>
+                <p>Required columns:</p>
+                <ul className="mt-1 ml-3 space-y-0.5">
+                  <li><code className="bg-blue-100 px-1 rounded">English_name</code> — image label</li>
+                  <li><code className="bg-blue-100 px-1 rounded">English_url</code> — full S3 URL</li>
+                </ul>
+                <p className="mt-1.5">Optional: <code className="bg-blue-100 px-1 rounded">id</code> (stored as legacy ID)</p>
+                <p className="mt-1.5 text-xs text-blue-600">Rows already in the Core are skipped. URLs are updated if the name matches.</p>
+              </>
+            ) : (
+              <>
+                <p>Required: <code className="bg-blue-100 px-1 rounded">english_value</code></p>
+                <p>Optional: <code className="bg-blue-100 px-1 rounded">legacy_id</code>, language columns e.g. <code className="bg-blue-100 px-1 rounded">hi_value</code>, <code className="bg-blue-100 px-1 rounded">hi_validation_status</code></p>
+              </>
+            )}
           </div>
           <div className="bg-white border-2 border-dashed border-slate-300 rounded-xl p-8 text-center">
             <input type="file" accept=".csv" onChange={e => setUploadFile(e.target.files?.[0] || null)}
@@ -344,58 +449,40 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
             </div>
           )}
           {uploadResult && (
-            <div className={`mt-4 p-3 rounded-lg text-sm font-medium ${uploadResult.startsWith('✓') ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+            <div className={`mt-4 p-3 rounded-lg text-sm font-medium whitespace-pre-wrap ${uploadResult.startsWith('✓') ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
               {uploadResult}
             </div>
           )}
         </div>
       )}
 
-      {/* Settings tab */}
+      {/* ── Settings tab ─────────────────────────────────────────────────── */}
       {tab === 'settings' && (
         <div className="max-w-lg space-y-6">
-          {/* Assign stocker */}
           <div className="bg-white border border-slate-200 rounded-xl p-5">
             <h3 className="font-medium text-slate-800 mb-1">Assigned Stocker</h3>
-            <p className="text-sm text-slate-500 mb-4">
-              The Stocker responsible for adding and maintaining data items in this Core.
-            </p>
+            <p className="text-sm text-slate-500 mb-4">The Stocker responsible for adding and maintaining data in this Core.</p>
             <div className="flex gap-3 items-center">
-              <select
-                value={assignedStockerId}
-                onChange={e => setAssignedStockerId(e.target.value)}
-                className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-              >
+              <select value={assignedStockerId} onChange={e => setAssignedStockerId(e.target.value)}
+                className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
                 <option value="">— Unassigned —</option>
-                {stockers.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
+                {stockers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
-              <button
-                onClick={saveAssignment}
-                disabled={savingAssignment}
-                className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2 flex-shrink-0"
-              >
-                {savingAssignment && <LoadingSpinner size="sm" />}
-                Save
+              <button onClick={saveAssignment} disabled={savingAssignment}
+                className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2 flex-shrink-0">
+                {savingAssignment && <LoadingSpinner size="sm" />} Save
               </button>
             </div>
             {stockers.length === 0 && (
               <p className="text-xs text-slate-400 mt-2">No Stockers found. Ask an Admin to create a user with the STOCKER role first.</p>
             )}
             {assignmentMsg && (
-              <p className={`text-sm mt-2 ${assignmentMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-600'}`}>
-                {assignmentMsg}
-              </p>
+              <p className={`text-sm mt-2 ${assignmentMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-600'}`}>{assignmentMsg}</p>
             )}
           </div>
-
-          {/* Core status */}
           <div className="bg-white border border-slate-200 rounded-xl p-5">
             <h3 className="font-medium text-slate-800 mb-1">Core Status</h3>
-            <p className="text-sm text-slate-500 mb-4">
-              Inactivating a Core inactivates all its data items and cascades to any Connect Data rows that reference them.
-            </p>
+            <p className="text-sm text-slate-500 mb-4">Inactivating a Core inactivates all its items and cascades to Connect Data rows that reference them.</p>
             <div className="flex items-center gap-3">
               <Badge label={core.status} variant={core.status} />
               <button
@@ -405,12 +492,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                   await api.put(`/cores/${coreId}/status`, { status: newStatus })
                   load()
                 }}
-                className={`px-4 py-2 text-sm rounded-lg border transition-colors ${
-                  core.status === 'ACTIVE'
-                    ? 'border-red-200 text-red-600 hover:bg-red-50'
-                    : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'
-                }`}
-              >
+                className={`px-4 py-2 text-sm rounded-lg border transition-colors ${core.status === 'ACTIVE' ? 'border-red-200 text-red-600 hover:bg-red-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'}`}>
                 {core.status === 'ACTIVE' ? 'Inactivate Core' : 'Reactivate Core'}
               </button>
             </div>
@@ -418,52 +500,64 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
         </div>
       )}
 
+      {/* ── Add Item / Add Image modal ─────────────────────────────────────── */}
       {showAddItem && (() => {
-        const suggestions = newValue.trim().length >= 3
-          ? items.filter(item =>
-              item.english_value.toLowerCase().includes(newValue.toLowerCase().trim())
-            ).slice(0, 8)
+        const suggestions = !isMedia && newValue.trim().length >= 3
+          ? items.filter(item => item.english_value.toLowerCase().includes(newValue.toLowerCase().trim())).slice(0, 8)
           : []
-        const exactMatch = items.find(i => i.english_value.toLowerCase() === newValue.toLowerCase().trim())
+        const exactMatch = !isMedia && items.find(i => i.english_value.toLowerCase() === newValue.toLowerCase().trim())
         return (
-        <Modal title="Add Item" onClose={() => setShowAddItem(false)}>
-          <div className="space-y-4">
-            <div className="relative">
-              <label className="block text-sm font-medium text-slate-700 mb-1">English value</label>
-              <input autoFocus value={newValue} onChange={e => setNewValue(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addItem()}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                placeholder="e.g. Tomato — type 3+ letters to see matches" />
-              {suggestions.length > 0 && (
-                <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
-                  <p className="px-3 py-1.5 text-xs text-slate-400 bg-slate-50 border-b border-slate-100">Existing items matching "{newValue.trim()}"</p>
+          <Modal title={isMedia ? 'Add Image' : 'Add Item'} onClose={() => { setShowAddItem(false); setNewValue(''); setNewMediaUrl(''); setError('') }}>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">{isMedia ? 'Name' : 'English value'}</label>
+                <input autoFocus value={newValue} onChange={e => setNewValue(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !isMedia) addItem() }}
+                  placeholder={isMedia ? 'e.g. Cotton — Vegetative — Leaf' : 'Enter value…'}
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+              </div>
+
+              {isMedia && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Image URL (S3)</label>
+                  <input value={newMediaUrl} onChange={e => setNewMediaUrl(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') addItem() }}
+                    placeholder="https://…"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 font-mono text-xs" />
+                  {newMediaUrl && (
+                    <img src={newMediaUrl} alt="preview" className="mt-2 h-24 w-auto rounded-lg object-cover border border-slate-200"
+                      onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                  )}
+                </div>
+              )}
+
+              {!isMedia && suggestions.length > 0 && (
+                <div className="border border-amber-200 bg-amber-50 rounded-lg p-3">
+                  <p className="text-xs font-medium text-amber-700 mb-1">Similar existing items:</p>
                   {suggestions.map(s => (
-                    <button key={s.id} type="button"
-                      onMouseDown={e => { e.preventDefault(); setNewValue(s.english_value) }}
-                      className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center justify-between ${s.status === 'INACTIVE' ? 'text-slate-400' : 'text-slate-800'}`}>
-                      <span>{s.english_value}</span>
-                      <Badge label={s.status} variant={s.status} />
-                    </button>
+                    <p key={s.id} className="text-xs text-amber-600">• {s.english_value}</p>
                   ))}
                 </div>
               )}
+              {!isMedia && exactMatch && (
+                <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  This exact value already exists in the Core.
+                </p>
+              )}
+              {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
+
+              <div className="flex gap-3 pt-1">
+                <button onClick={addItem} disabled={saving || (!isMedia && !!exactMatch)}
+                  className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2 font-medium">
+                  {saving && <LoadingSpinner size="sm" />} Save
+                </button>
+                <button onClick={() => { setShowAddItem(false); setNewValue(''); setNewMediaUrl(''); setError('') }}
+                  className="px-4 py-2 text-sm text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50">
+                  Cancel
+                </button>
+              </div>
             </div>
-            {exactMatch && (
-              <p className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                ⚠️ "{exactMatch.english_value}" already exists ({exactMatch.status.toLowerCase()}).
-                {exactMatch.status === 'INACTIVE' ? ' Reactivate it instead of creating a duplicate.' : ' Saving will be rejected.'}
-              </p>
-            )}
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setShowAddItem(false)} className="px-4 py-2 text-sm text-slate-600">Cancel</button>
-              <button onClick={addItem} disabled={saving || !newValue.trim()}
-                className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2">
-                {saving && <LoadingSpinner size="sm" />} Add Item
-              </button>
-            </div>
-          </div>
-        </Modal>
+          </Modal>
         )
       })()}
     </div>

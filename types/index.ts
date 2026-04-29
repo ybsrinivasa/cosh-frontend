@@ -80,6 +80,7 @@ export interface CoreDataItem {
   status: Status
   legacy_item_id: string | null
   created_by_name: string | null
+  s3_url: string | null
   created_at: string
   translations: Translation[]
 }
