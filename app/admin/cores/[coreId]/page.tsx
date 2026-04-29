@@ -383,19 +383,71 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
               </p>
             )}
           </div>
+
+          {/* Core status */}
+          <div className="bg-white border border-slate-200 rounded-xl p-5">
+            <h3 className="font-medium text-slate-800 mb-1">Core Status</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              Inactivating a Core inactivates all its data items and cascades to any Connect Data rows that reference them.
+            </p>
+            <div className="flex items-center gap-3">
+              <Badge label={core.status} variant={core.status} />
+              <button
+                onClick={async () => {
+                  const newStatus = core.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+                  if (newStatus === 'INACTIVE' && !confirm(`Inactivate "${core.name}"? This will inactivate all its items and cascade to Connect Data.`)) return
+                  await api.put(`/cores/${coreId}/status`, { status: newStatus })
+                  load()
+                }}
+                className={`px-4 py-2 text-sm rounded-lg border transition-colors ${
+                  core.status === 'ACTIVE'
+                    ? 'border-red-200 text-red-600 hover:bg-red-50'
+                    : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'
+                }`}
+              >
+                {core.status === 'ACTIVE' ? 'Inactivate Core' : 'Reactivate Core'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      {showAddItem && (
+      {showAddItem && (() => {
+        const suggestions = newValue.trim().length >= 3
+          ? items.filter(item =>
+              item.english_value.toLowerCase().includes(newValue.toLowerCase().trim())
+            ).slice(0, 8)
+          : []
+        const exactMatch = items.find(i => i.english_value.toLowerCase() === newValue.toLowerCase().trim())
+        return (
         <Modal title="Add Item" onClose={() => setShowAddItem(false)}>
           <div className="space-y-4">
-            <div>
+            <div className="relative">
               <label className="block text-sm font-medium text-slate-700 mb-1">English value</label>
               <input autoFocus value={newValue} onChange={e => setNewValue(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && addItem()}
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
-                placeholder="e.g. Tomato" />
+                placeholder="e.g. Tomato — type 3+ letters to see matches" />
+              {suggestions.length > 0 && (
+                <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+                  <p className="px-3 py-1.5 text-xs text-slate-400 bg-slate-50 border-b border-slate-100">Existing items matching "{newValue.trim()}"</p>
+                  {suggestions.map(s => (
+                    <button key={s.id} type="button"
+                      onMouseDown={e => { e.preventDefault(); setNewValue(s.english_value) }}
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center justify-between ${s.status === 'INACTIVE' ? 'text-slate-400' : 'text-slate-800'}`}>
+                      <span>{s.english_value}</span>
+                      <Badge label={s.status} variant={s.status} />
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
+            {exactMatch && (
+              <p className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                ⚠️ "{exactMatch.english_value}" already exists ({exactMatch.status.toLowerCase()}).
+                {exactMatch.status === 'INACTIVE' ? ' Reactivate it instead of creating a duplicate.' : ' Saving will be rejected.'}
+              </p>
+            )}
             {error && <p className="text-sm text-red-600">{error}</p>}
             <div className="flex justify-end gap-2">
               <button onClick={() => setShowAddItem(false)} className="px-4 py-2 text-sm text-slate-600">Cancel</button>
@@ -406,7 +458,8 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
             </div>
           </div>
         </Modal>
-      )}
+        )
+      })()}
     </div>
   )
 }

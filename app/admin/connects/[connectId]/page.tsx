@@ -157,6 +157,12 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
       .join('|')
   }
 
+  async function toggleRowStatus(cdiId: string, currentStatus: string) {
+    const newStatus = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+    await api.put(`/connects/${connectId}/items/${cdiId}/status`, { status: newStatus })
+    load()
+  }
+
   async function renameConnect() {
     if (!editedConnectName.trim()) return
     try {
@@ -562,20 +568,29 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2">
                                 <Badge label={item.status} variant={item.status} />
-                                {item.status === 'ACTIVE' && (!connect.assigned_stocker_id || connect.assigned_stocker_id === getStoredUser()?.id) && (
-                                  <button
-                                    onClick={() => {
-                                      const preselect: Record<number, string> = {}
-                                      item.positions.forEach(p => { preselect[p.position_number] = p.core_data_item_id })
-                                      setSelection(preselect)
-                                      setEditingRowId(item.id)
-                                      setSaveError(''); setSaveSuccess('')
-                                      // Switch to Data tab and scroll form into view
-                                    }}
-                                    className="text-xs text-teal-600 hover:text-teal-800 border border-teal-200 px-2 py-0.5 rounded hover:bg-teal-50 transition-colors"
-                                  >
-                                    Edit
-                                  </button>
+                                {(!connect.assigned_stocker_id || connect.assigned_stocker_id === getStoredUser()?.id) && (
+                                  <>
+                                    {item.status === 'ACTIVE' && (
+                                      <button
+                                        onClick={() => {
+                                          const preselect: Record<number, string> = {}
+                                          item.positions.forEach(p => { preselect[p.position_number] = p.core_data_item_id })
+                                          setSelection(preselect)
+                                          setEditingRowId(item.id)
+                                          setSaveError(''); setSaveSuccess('')
+                                        }}
+                                        className="text-xs text-teal-600 hover:text-teal-800 border border-teal-200 px-2 py-0.5 rounded hover:bg-teal-50 transition-colors"
+                                      >
+                                        Edit
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => toggleRowStatus(item.id, item.status)}
+                                      className={`text-xs px-2 py-0.5 rounded border transition-colors ${item.status === 'ACTIVE' ? 'border-red-200 text-red-500 hover:bg-red-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'}`}
+                                    >
+                                      {item.status === 'ACTIVE' ? 'Inactivate' : 'Activate'}
+                                    </button>
+                                  </>
                                 )}
                               </div>
                             </td>
@@ -661,6 +676,32 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
             {assignmentMsg && (
               <p className={`text-sm mt-2 ${assignmentMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-600'}`}>{assignmentMsg}</p>
             )}
+          </div>
+
+          {/* Connect status */}
+          <div className="bg-white border border-slate-200 rounded-xl p-5">
+            <h3 className="font-medium text-slate-800 mb-1">Connect Status</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              Inactivating a Connect inactivates all its data rows and their Neo4J relationships.
+            </p>
+            <div className="flex items-center gap-3">
+              <Badge label={connect.status} variant={connect.status} />
+              <button
+                onClick={async () => {
+                  const newStatus = connect.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+                  if (newStatus === 'INACTIVE' && !confirm(`Inactivate "${connect.name}"? All data rows will be inactivated.`)) return
+                  await api.put(`/connects/${connectId}/status`, { status: newStatus })
+                  load()
+                }}
+                className={`px-4 py-2 text-sm rounded-lg border transition-colors ${
+                  connect.status === 'ACTIVE'
+                    ? 'border-red-200 text-red-600 hover:bg-red-50'
+                    : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'
+                }`}
+              >
+                {connect.status === 'ACTIVE' ? 'Inactivate Connect' : 'Reactivate Connect'}
+              </button>
+            </div>
           </div>
         </div>
       )}
