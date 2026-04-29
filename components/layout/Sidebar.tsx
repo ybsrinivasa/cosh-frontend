@@ -18,8 +18,12 @@ const reviewerNav = [
 
 // Visible to Designer and Admin only
 const designerNav = [
-  { href: '/admin/sync',      label: 'Sync',             icon: '🔄' },
   { href: '/admin/migration', label: 'Migration Status', icon: '📊' },
+]
+
+// Visible to Admin only (in addition to adminNav Users/Registries)
+const adminOnlyNav = [
+  { href: '/admin/sync', label: 'Sync', icon: '🔄' },
 ]
 
 // Visible to Admin only
@@ -69,6 +73,14 @@ export default function Sidebar() {
 
         {/* Designer and Admin */}
         {hasRole(user, 'DESIGNER', 'ADMIN') && designerNav.map(item => (
+          <Link key={item.href} href={item.href} className={linkClass(item.href)}>
+            <span>{item.icon}</span>
+            <span>{item.label}</span>
+          </Link>
+        ))}
+
+        {/* Admin only — Sync */}
+        {isAdmin(user) && adminOnlyNav.map(item => (
           <Link key={item.href} href={item.href} className={linkClass(item.href)}>
             <span>{item.icon}</span>
             <span>{item.label}</span>
