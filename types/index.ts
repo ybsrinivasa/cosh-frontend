@@ -171,6 +171,7 @@ export interface Product {
   name: string
   display_name: string
   sync_endpoint_url: string | null
+  sync_api_key: string | null
   status: Status
 }
 

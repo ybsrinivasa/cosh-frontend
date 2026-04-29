@@ -15,7 +15,17 @@ interface RelTypeForm {
   example: string
 }
 
-const emptyForm: RelTypeForm = { label: '', display_name: '', description: '', example: '' }
+interface ProductForm {
+  name: string
+  display_name: string
+  sync_endpoint_url: string
+  sync_api_key: string
+}
+
+const emptyRTForm: RelTypeForm = { label: '', display_name: '', description: '', example: '' }
+const emptyProductForm: ProductForm = { name: '', display_name: '', sync_endpoint_url: '', sync_api_key: '' }
+// keep backward compat alias
+const emptyForm = emptyRTForm
 
 export default function RegistriesPage() {
   const [languages, setLanguages] = useState<Language[]>([])
@@ -24,17 +34,26 @@ export default function RegistriesPage() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'languages' | 'reltypes' | 'products'>('languages')
 
-  // Create form
+  // Rel type create/edit
   const [showCreate, setShowCreate] = useState(false)
   const [createForm, setCreateForm] = useState<RelTypeForm>(emptyForm)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
-
-  // Edit state — keyed by rel type id
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<RelTypeForm>(emptyForm)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+
+  // Product create/edit
+  const [showProductCreate, setShowProductCreate] = useState(false)
+  const [productCreateForm, setProductCreateForm] = useState<ProductForm>(emptyProductForm)
+  const [productCreating, setProductCreating] = useState(false)
+  const [productCreateError, setProductCreateError] = useState('')
+  const [editingProductId, setEditingProductId] = useState<string | null>(null)
+  const [productEditForm, setProductEditForm] = useState<ProductForm>(emptyProductForm)
+  const [productSaving, setProductSaving] = useState(false)
+  const [productSaveError, setProductSaveError] = useState('')
+  const [showApiKey, setShowApiKey] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     if (!isAdmin(getStoredUser())) { setLoading(false); return }
@@ -120,6 +139,65 @@ export default function RegistriesPage() {
       const err = e as { response?: { data?: { detail?: string } } }
       setSaveError(err.response?.data?.detail || 'Failed to save')
     } finally { setSaving(false) }
+  }
+
+  // ── Product create/edit ───────────────────────────────────────────────────
+
+  async function submitProductCreate() {
+    setProductCreateError('')
+    if (!productCreateForm.name.trim()) { setProductCreateError('Identifier is required'); return }
+    if (!productCreateForm.display_name.trim()) { setProductCreateError('Display name is required'); return }
+    setProductCreating(true)
+    try {
+      await api.post('/admin/registries/products', {
+        name: productCreateForm.name.trim(),
+        display_name: productCreateForm.display_name.trim(),
+        sync_endpoint_url: productCreateForm.sync_endpoint_url.trim() || null,
+        sync_api_key: productCreateForm.sync_api_key.trim() || null,
+      })
+      setProductCreateForm(emptyProductForm)
+      setShowProductCreate(false)
+      load()
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setProductCreateError(err.response?.data?.detail || 'Failed to create')
+    } finally { setProductCreating(false) }
+  }
+
+  function startProductEdit(p: Product) {
+    setEditingProductId(p.id)
+    setProductEditForm({
+      name: p.name,
+      display_name: p.display_name,
+      sync_endpoint_url: p.sync_endpoint_url || '',
+      sync_api_key: p.sync_api_key || '',
+    })
+    setProductSaveError('')
+  }
+
+  async function submitProductEdit(p: Product) {
+    setProductSaveError('')
+    if (!productEditForm.display_name.trim()) { setProductSaveError('Display name is required'); return }
+    setProductSaving(true)
+    try {
+      await api.put(`/admin/registries/products/${p.id}`, {
+        display_name: productEditForm.display_name.trim(),
+        sync_endpoint_url: productEditForm.sync_endpoint_url.trim() || null,
+        sync_api_key: productEditForm.sync_api_key.trim() || null,
+      })
+      setEditingProductId(null)
+      load()
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setProductSaveError(err.response?.data?.detail || 'Failed to save')
+    } finally { setProductSaving(false) }
+  }
+
+  async function toggleProductStatus(p: Product) {
+    const newStatus = p.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+    if (newStatus === 'INACTIVE' && !confirm(`Deactivate "${p.display_name}"? It will no longer appear in Sync.`)) return
+    await api.put(`/admin/registries/products/${p.id}`, { status: newStatus })
+    load()
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -297,21 +375,159 @@ export default function RegistriesPage() {
 
       {/* ── Products tab ──────────────────────────────────────────────────── */}
       {tab === 'products' && (
-        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-          {products.map(p => (
-            <div key={p.id} className="px-5 py-4 border-b border-slate-100 last:border-0">
-              <div className="flex items-center justify-between">
+        <div>
+          {/* Create form */}
+          {showProductCreate ? (
+            <div className="bg-white border border-green-200 rounded-xl p-5 mb-4">
+              <h3 className="text-sm font-semibold text-slate-800 mb-4">New Product</h3>
+              <div className="grid grid-cols-2 gap-3 max-w-2xl">
                 <div>
-                  <p className="font-medium text-slate-800">{p.display_name}</p>
-                  <p className="text-sm text-slate-400 font-mono">{p.name}</p>
-                  {p.sync_endpoint_url && (
-                    <p className="text-xs text-slate-400 mt-0.5">Endpoint: {p.sync_endpoint_url}</p>
-                  )}
+                  <label className="block text-xs font-medium text-slate-500 mb-1">
+                    Identifier <span className="text-red-400">*</span>
+                    <span className="ml-1 text-slate-400 font-normal">(lowercase, no spaces)</span>
+                  </label>
+                  <input value={productCreateForm.name}
+                    onChange={e => setProductCreateForm(f => ({ ...f, name: e.target.value.toLowerCase().replace(/\s+/g, '_') }))}
+                    placeholder="e.g. rootstalk"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-green-500" />
                 </div>
-                <Badge label={p.status} variant={p.status} />
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Display name <span className="text-red-400">*</span></label>
+                  <input value={productCreateForm.display_name}
+                    onChange={e => setProductCreateForm(f => ({ ...f, display_name: e.target.value }))}
+                    placeholder="e.g. RootsTalk"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Sync endpoint URL</label>
+                  <input value={productCreateForm.sync_endpoint_url}
+                    onChange={e => setProductCreateForm(f => ({ ...f, sync_endpoint_url: e.target.value }))}
+                    placeholder="https://rootstalk.eywa.farm/api/cosh-sync"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-green-500" />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-slate-500 mb-1">API key (shared secret)</label>
+                  <input type="password" value={productCreateForm.sync_api_key}
+                    onChange={e => setProductCreateForm(f => ({ ...f, sync_api_key: e.target.value }))}
+                    placeholder="Shared secret sent in Authorization header"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-green-500" />
+                </div>
+              </div>
+              {productCreateError && <p className="mt-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{productCreateError}</p>}
+              <div className="flex gap-3 mt-4">
+                <button onClick={submitProductCreate} disabled={productCreating}
+                  className="px-5 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium flex items-center gap-2">
+                  {productCreating && <LoadingSpinner size="sm" />} Save
+                </button>
+                <button onClick={() => { setShowProductCreate(false); setProductCreateForm(emptyProductForm); setProductCreateError('') }}
+                  className="px-4 py-2 text-sm text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50">
+                  Cancel
+                </button>
               </div>
             </div>
-          ))}
+          ) : (
+            <div className="mb-4">
+              <button onClick={() => setShowProductCreate(true)}
+                className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
+                + New Product
+              </button>
+            </div>
+          )}
+
+          {/* Product list */}
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            {products.length === 0 && (
+              <p className="px-5 py-6 text-sm text-slate-400 text-center">No products yet.</p>
+            )}
+            {products.map(p => (
+              <div key={p.id} className="border-b border-slate-100 last:border-0">
+                {editingProductId === p.id ? (
+                  /* ── Edit row ── */
+                  <div className="px-5 py-4 bg-green-50">
+                    <div className="grid grid-cols-2 gap-3 max-w-2xl mb-3">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Identifier</label>
+                        <input value={productEditForm.name} disabled
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono bg-slate-100 text-slate-400 cursor-not-allowed" />
+                        <p className="text-xs text-slate-400 mt-0.5">Identifier cannot be changed after creation</p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Display name <span className="text-red-400">*</span></label>
+                        <input value={productEditForm.display_name}
+                          onChange={e => setProductEditForm(f => ({ ...f, display_name: e.target.value }))}
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Sync endpoint URL</label>
+                        <input value={productEditForm.sync_endpoint_url}
+                          onChange={e => setProductEditForm(f => ({ ...f, sync_endpoint_url: e.target.value }))}
+                          placeholder="https://…/api/cosh-sync"
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-xs font-medium text-slate-500 mb-1">API key — leave blank to keep existing</label>
+                        <input type="password" value={productEditForm.sync_api_key}
+                          onChange={e => setProductEditForm(f => ({ ...f, sync_api_key: e.target.value }))}
+                          placeholder="Enter new key to replace, or leave blank"
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
+                      </div>
+                    </div>
+                    {productSaveError && <p className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{productSaveError}</p>}
+                    <div className="flex gap-3">
+                      <button onClick={() => submitProductEdit(p)} disabled={productSaving}
+                        className="px-4 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium flex items-center gap-2">
+                        {productSaving && <LoadingSpinner size="sm" />} Save
+                      </button>
+                      <button onClick={() => setEditingProductId(null)}
+                        className="px-3 py-1.5 text-sm text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg hover:bg-white">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* ── Read row ── */
+                  <div className="flex items-start justify-between px-5 py-4 hover:bg-slate-50 group">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-3 mb-1">
+                        <p className="font-medium text-slate-800">{p.display_name}</p>
+                        <code className="text-xs font-mono bg-slate-100 px-2 py-0.5 rounded text-slate-500">{p.name}</code>
+                        <Badge label={p.status} variant={p.status} />
+                      </div>
+                      <div className="space-y-0.5">
+                        {p.sync_endpoint_url ? (
+                          <p className="text-xs text-slate-500 font-mono truncate">
+                            <span className="text-slate-400 mr-1">Endpoint:</span>{p.sync_endpoint_url}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-amber-500">⚠ No sync endpoint configured</p>
+                        )}
+                        <p className="text-xs text-slate-400">
+                          API key: {p.sync_api_key ? (
+                            <span className="font-mono">
+                              {showApiKey[p.id] ? p.sync_api_key : '••••••••••••'}
+                              <button onClick={() => setShowApiKey(prev => ({ ...prev, [p.id]: !prev[p.id] }))}
+                                className="ml-1.5 text-slate-400 hover:text-slate-600 underline">
+                                {showApiKey[p.id] ? 'hide' : 'show'}
+                              </button>
+                            </span>
+                          ) : <span className="text-amber-500">not set</span>}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 ml-4 flex-shrink-0">
+                      <button onClick={() => toggleProductStatus(p)}
+                        className={`text-xs px-2 py-0.5 rounded border transition-colors opacity-0 group-hover:opacity-100 ${p.status === 'ACTIVE' ? 'border-red-200 text-red-500 hover:bg-red-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'}`}>
+                        {p.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
+                      </button>
+                      <button onClick={() => startProductEdit(p)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-green-600 text-base px-2"
+                        title="Edit">✎</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
