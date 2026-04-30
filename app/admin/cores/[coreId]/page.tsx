@@ -163,6 +163,46 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
     }
   }
 
+  async function downloadTranslationCsv(langCode: string, langName: string) {
+    try {
+      const response = await api.get(`/cores/${coreId}/export-translations?lang=${langCode}`, {
+        responseType: 'blob'
+      })
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${core?.name}_${langCode}.csv`
+      a.click()
+      window.URL.revokeObjectURL(url)
+    } catch {
+      alert(`Failed to download ${langName} CSV`)
+    }
+  }
+
+  const [importingLang, setImportingLang] = useState<string | null>(null)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importResult, setImportResult] = useState('')
+  const [importLoading, setImportLoading] = useState(false)
+
+  async function importTranslationCsv(langCode: string) {
+    if (!importFile) return
+    setImportLoading(true); setImportResult('')
+    const form = new FormData()
+    form.append('file', importFile)
+    try {
+      const { data } = await api.post(
+        `/cores/${coreId}/import-translations?lang=${langCode}`, form,
+        { headers: { 'Content-Type': 'multipart/form-data' } }
+      )
+      setImportResult(`✓ Updated: ${data.updated} | Skipped: ${data.skipped}${data.errors?.length ? ` | Errors: ${data.errors.length}` : ''}`)
+      setImportFile(null)
+      load()
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setImportResult(`✗ ${err.response?.data?.detail || 'Import failed'}`)
+    } finally { setImportLoading(false) }
+  }
+
   async function uploadCsv() {
     if (!uploadFile) return
     setUploading(true); setUploadResult('')
@@ -415,19 +455,92 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
 
       {/* ── Languages tab (TEXT only) ─────────────────────────────────────── */}
       {tab === 'languages' && !isMedia && (
-        <div>
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-4">
-            {languages.length === 0 ? (
-              <p className="text-center py-8 text-slate-400 text-sm">No languages configured</p>
-            ) : (
-              languages.map(l => (
-                <div key={l.id} className="flex items-center justify-between px-4 py-3 border-b border-slate-100 last:border-0">
-                  <span className="text-sm font-mono text-slate-700">{l.language_code}</span>
-                  <Badge label="Configured" variant="active" />
-                </div>
-              ))
-            )}
+        <div className="space-y-4">
+
+          {/* How it works info box */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">
+            <p className="font-medium mb-1">Translation Round-Trip Workflow</p>
+            <p>1. <strong>Download CSV</strong> for a language → share with expert for correction.</p>
+            <p>2. Expert fills in / corrects the translation column and saves the file.</p>
+            <p>3. Designer <strong>uploads the corrected CSV</strong> → all rows are marked Expert Validated.</p>
           </div>
+
+          {/* Configured languages */}
+          {languages.length === 0 ? (
+            <p className="text-center py-8 text-slate-400 text-sm bg-white border border-slate-200 rounded-xl">
+              No languages configured — add one below
+            </p>
+          ) : (
+            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+              {languages.map(l => {
+                const langInfo = allLanguages.find(al => al.language_code === l.language_code)
+                const isImporting = importingLang === l.language_code
+                return (
+                  <div key={l.id} className="border-b border-slate-100 last:border-0">
+                    {/* Language header row */}
+                    <div className="flex items-center justify-between px-4 py-3">
+                      <div>
+                        <span className="text-sm font-medium text-slate-800">
+                          {langInfo?.language_name_en || l.language_code}
+                        </span>
+                        <span className="ml-2 text-xs font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                          {l.language_code}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {/* Download button */}
+                        <button
+                          onClick={() => downloadTranslationCsv(l.language_code, langInfo?.language_name_en || l.language_code)}
+                          className="px-3 py-1.5 text-xs font-medium border border-green-300 text-green-700 rounded-lg hover:bg-green-50 transition-colors flex items-center gap-1">
+                          ↓ Download CSV
+                        </button>
+                        {/* Toggle import form */}
+                        <button
+                          onClick={() => {
+                            setImportingLang(isImporting ? null : l.language_code)
+                            setImportFile(null); setImportResult('')
+                          }}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${isImporting ? 'bg-green-600 text-white border-green-600' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}>
+                          ↑ Upload Corrected
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Import form — shown when expanded */}
+                    {isImporting && (
+                      <div className="px-4 pb-4 bg-green-50 border-t border-green-100">
+                        <p className="text-xs text-slate-500 mt-3 mb-2">
+                          Upload the corrected CSV for <strong>{langInfo?.language_name_en}</strong>.
+                          All rows will be marked Expert Validated.
+                        </p>
+                        <div className="flex items-center gap-3">
+                          <input type="file" accept=".csv"
+                            onChange={e => { setImportFile(e.target.files?.[0] || null); setImportResult('') }}
+                            className="text-sm text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-white file:text-green-700 hover:file:bg-green-50" />
+                          {importFile && (
+                            <button
+                              onClick={() => importTranslationCsv(l.language_code)}
+                              disabled={importLoading}
+                              className="px-3 py-1.5 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-1 flex-shrink-0">
+                              {importLoading && <LoadingSpinner size="sm" />}
+                              {importLoading ? 'Uploading…' : 'Upload'}
+                            </button>
+                          )}
+                        </div>
+                        {importResult && (
+                          <p className={`mt-2 text-xs font-medium ${importResult.startsWith('✓') ? 'text-green-700' : 'text-red-600'}`}>
+                            {importResult}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Add language */}
           {unusedLanguages.length > 0 && (
             <div>
               <p className="text-sm font-medium text-slate-600 mb-2">Add language:</p>
