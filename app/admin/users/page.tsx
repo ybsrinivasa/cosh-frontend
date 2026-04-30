@@ -9,7 +9,10 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import { getStoredUser, isAdmin } from '@/lib/auth'
 import AccessDenied from '@/components/ui/AccessDenied'
 
-const ROLES: Role[] = ['ADMIN', 'DESIGNER', 'STOCKER', 'REVIEWER']
+// ── Role rules ──────────────────────────────────────────────────────────────
+// Primary roles: exactly one required. ADMIN is exclusive.
+// REVIEWER is an optional add-on for DESIGNER or STOCKER only.
+const PRIMARY_ROLES: Role[] = ['ADMIN', 'DESIGNER', 'STOCKER']
 
 type WorkloadEntry = {
   user_id: string
@@ -22,16 +25,86 @@ type WorkloadEntry = {
   connects_stocked: { id: string; name: string; status: string }[]
 }
 
+type RoleForm = { primary: Role | ''; reviewer: boolean }
+
+function buildRoles(f: RoleForm): Role[] {
+  if (!f.primary) return []
+  const roles: Role[] = [f.primary]
+  if (f.reviewer && f.primary !== 'ADMIN') roles.push('REVIEWER')
+  return roles
+}
+
+function parseRoles(roles: Role[]): RoleForm {
+  const primary = (roles.find(r => PRIMARY_ROLES.includes(r)) ?? '') as Role | ''
+  const reviewer = roles.includes('REVIEWER')
+  return { primary, reviewer }
+}
+
+// ── Role selector component ──────────────────────────────────────────────────
+function RoleSelector({ value, onChange }: { value: RoleForm; onChange: (v: RoleForm) => void }) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-2">Primary role</label>
+        <div className="flex gap-2 flex-wrap">
+          {PRIMARY_ROLES.map(role => (
+            <button
+              key={role}
+              type="button"
+              onClick={() => onChange({ primary: role, reviewer: role === 'ADMIN' ? false : value.reviewer })}
+              className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                value.primary === role
+                  ? 'border-green-500 bg-green-50 text-green-700 font-medium'
+                  : 'border-slate-200 text-slate-600 hover:border-green-300'
+              }`}
+            >
+              {role}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-slate-400 mt-1.5">
+          Admin: one only, no other roles. Designer: one only. Stocker: any number.
+        </p>
+      </div>
+
+      {value.primary && value.primary !== 'ADMIN' && (
+        <div>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={value.reviewer}
+              onChange={e => onChange({ ...value, reviewer: e.target.checked })}
+              className="w-4 h-4 accent-green-600"
+            />
+            <span className="text-sm text-slate-700">
+              Also assign <strong>Reviewer</strong> role
+              <span className="text-slate-400 font-normal"> (only one Reviewer allowed)</span>
+            </span>
+          </label>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function UsersPage() {
   const [tab, setTab] = useState<'users' | 'workload'>('users')
   const [users, setUsers] = useState<User[]>([])
   const [workload, setWorkload] = useState<WorkloadEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [workloadLoading, setWorkloadLoading] = useState(false)
-  const [showModal, setShowModal] = useState(false)
-  const [form, setForm] = useState({ email: '', name: '', roles: [] as Role[] })
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
+
+  // New user modal
+  const [showCreate, setShowCreate] = useState(false)
+  const [createForm, setCreateForm] = useState({ email: '', name: '', roles: { primary: '' as Role | '', reviewer: false } })
+  const [createSaving, setCreateSaving] = useState(false)
+  const [createError, setCreateError] = useState('')
+
+  // Edit roles modal
+  const [editUser, setEditUser] = useState<User | null>(null)
+  const [editRoles, setEditRoles] = useState<RoleForm>({ primary: '', reviewer: false })
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState('')
 
   useEffect(() => {
     if (!isAdmin(getStoredUser())) { setLoading(false); return }
@@ -39,9 +112,7 @@ export default function UsersPage() {
   }, [])
 
   useEffect(() => {
-    if (tab === 'workload' && workload.length === 0 && isAdmin(getStoredUser())) {
-      loadWorkload()
-    }
+    if (tab === 'workload' && workload.length === 0 && isAdmin(getStoredUser())) loadWorkload()
   }, [tab])
 
   async function loadUsers() {
@@ -59,17 +130,32 @@ export default function UsersPage() {
     } finally { setWorkloadLoading(false) }
   }
 
-  async function create() {
-    if (!form.email || form.roles.length === 0) return
-    setSaving(true); setError('')
+  async function createUser() {
+    const roles = buildRoles(createForm.roles)
+    if (!createForm.email || roles.length === 0) return
+    setCreateSaving(true); setCreateError('')
     try {
-      await api.post('/admin/users', form)
-      setForm({ email: '', name: '', roles: [] })
-      setShowModal(false); loadUsers()
+      await api.post('/admin/users', { email: createForm.email, name: createForm.name, roles })
+      setCreateForm({ email: '', name: '', roles: { primary: '', reviewer: false } })
+      setShowCreate(false); loadUsers()
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } }
-      setError(err.response?.data?.detail || 'Failed to create user')
-    } finally { setSaving(false) }
+      setCreateError(err.response?.data?.detail || 'Failed to create user')
+    } finally { setCreateSaving(false) }
+  }
+
+  async function saveRoles() {
+    if (!editUser) return
+    const roles = buildRoles(editRoles)
+    if (roles.length === 0) return
+    setEditSaving(true); setEditError('')
+    try {
+      await api.put(`/admin/users/${editUser.id}/roles`, { roles })
+      setEditUser(null); loadUsers()
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setEditError(err.response?.data?.detail || 'Failed to update roles')
+    } finally { setEditSaving(false) }
   }
 
   async function toggleStatus(user: User) {
@@ -78,11 +164,11 @@ export default function UsersPage() {
     loadUsers()
   }
 
-  function toggleRole(role: Role) {
-    setForm(f => ({
-      ...f,
-      roles: f.roles.includes(role) ? f.roles.filter(r => r !== role) : [...f.roles, role]
-    }))
+  function openEditRoles(user: User) {
+    const activeRoles = user.roles.filter(r => r.status === 'ACTIVE').map(r => r.role)
+    setEditRoles(parseRoles(activeRoles))
+    setEditError('')
+    setEditUser(user)
   }
 
   if (loading) return <div className="flex justify-center py-20"><LoadingSpinner size="lg" /></div>
@@ -95,7 +181,7 @@ export default function UsersPage() {
         subtitle={`${users.length} user${users.length !== 1 ? 's' : ''}`}
         action={
           tab === 'users' ? (
-            <button onClick={() => { setShowModal(true); setError('') }}
+            <button onClick={() => { setShowCreate(true); setCreateError('') }}
               className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
               + New User
             </button>
@@ -106,15 +192,10 @@ export default function UsersPage() {
       {/* Tabs */}
       <div className="flex gap-1 mb-5 border-b border-slate-200">
         {(['users', 'workload'] as const).map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
+          <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${
-              tab === t
-                ? 'border-green-600 text-green-700'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
+              tab === t ? 'border-green-600 text-green-700' : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}>
             {t === 'workload' ? 'Team Workload' : 'Users'}
           </button>
         ))}
@@ -136,8 +217,16 @@ export default function UsersPage() {
               </div>
               <div className="flex items-center gap-2">
                 <Badge label={user.status} variant={user.status} />
+                <button onClick={() => openEditRoles(user)}
+                  className="text-xs px-2 py-0.5 rounded border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors">
+                  Edit roles
+                </button>
                 <button onClick={() => toggleStatus(user)}
-                  className={`text-xs px-2 py-0.5 rounded border transition-colors ${user.status === 'ACTIVE' ? 'border-red-200 text-red-500 hover:bg-red-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'}`}>
+                  className={`text-xs px-2 py-0.5 rounded border transition-colors ${
+                    user.status === 'ACTIVE'
+                      ? 'border-red-200 text-red-500 hover:bg-red-50'
+                      : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'
+                  }`}>
                   {user.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}
                 </button>
               </div>
@@ -156,7 +245,6 @@ export default function UsersPage() {
               <div className="space-y-4">
                 {workload.map(entry => (
                   <div key={entry.user_id} className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                    {/* User header */}
                     <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-100 bg-slate-50">
                       <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-semibold"
                         style={{ background: 'linear-gradient(135deg, #065f46, #059669)' }}>
@@ -167,34 +255,14 @@ export default function UsersPage() {
                         <p className="text-xs text-slate-400">{entry.email}</p>
                       </div>
                       <div className="ml-auto flex gap-1">
-                        {entry.roles.map(r => (
-                          <Badge key={r} label={r} variant={r.toLowerCase()} />
-                        ))}
+                        {entry.roles.map(r => <Badge key={r} label={r} variant={r.toLowerCase()} />)}
                       </div>
                     </div>
-
-                    {/* Workload grid */}
                     <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-slate-100">
-                      <WorkloadColumn
-                        label="Cores designed"
-                        items={entry.cores_designed}
-                        emptyLabel="None"
-                      />
-                      <WorkloadColumn
-                        label="Cores stocked"
-                        items={entry.cores_stocked}
-                        emptyLabel="None"
-                      />
-                      <WorkloadColumn
-                        label="Connects designed"
-                        items={entry.connects_designed}
-                        emptyLabel="None"
-                      />
-                      <WorkloadColumn
-                        label="Connects stocked"
-                        items={entry.connects_stocked}
-                        emptyLabel="None"
-                      />
+                      <WorkloadColumn label="Cores designed" items={entry.cores_designed} />
+                      <WorkloadColumn label="Cores stocked" items={entry.cores_stocked} />
+                      <WorkloadColumn label="Connects designed" items={entry.connects_designed} />
+                      <WorkloadColumn label="Connects stocked" items={entry.connects_stocked} />
                     </div>
                   </div>
                 ))}
@@ -203,41 +271,50 @@ export default function UsersPage() {
       )}
 
       {/* ── New User modal ── */}
-      {showModal && (
-        <Modal title="New User" onClose={() => setShowModal(false)}>
+      {showCreate && (
+        <Modal title="New User" onClose={() => setShowCreate(false)}>
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-              <input type="email" autoFocus value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+              <input type="email" autoFocus value={createForm.email}
+                onChange={e => setCreateForm({ ...createForm, email: e.target.value })}
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                 placeholder="user@eywa.farm" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
-              <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+              <input value={createForm.name}
+                onChange={e => setCreateForm({ ...createForm, name: e.target.value })}
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                 placeholder="Full name" />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Roles</label>
-              <div className="flex gap-2 flex-wrap">
-                {ROLES.map(role => (
-                  <button key={role} onClick={() => toggleRole(role)}
-                    className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${form.roles.includes(role) ? 'border-green-500 bg-green-50 text-green-700' : 'border-slate-200 text-slate-600 hover:border-green-300'}`}>
-                    {role}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <p className="text-xs text-slate-400">
-              The user will sign in via email OTP — no password needed.
-            </p>
-            {error && <p className="text-sm text-red-600">{error}</p>}
+            <RoleSelector value={createForm.roles} onChange={v => setCreateForm({ ...createForm, roles: v })} />
+            <p className="text-xs text-slate-400">The user will sign in via email OTP — no password needed.</p>
+            {createError && <p className="text-sm text-red-600">{createError}</p>}
             <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-slate-600">Cancel</button>
-              <button onClick={create} disabled={saving || !form.email || form.roles.length === 0}
+              <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm text-slate-600">Cancel</button>
+              <button onClick={createUser}
+                disabled={createSaving || !createForm.email || !createForm.roles.primary}
                 className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
-                {saving && <LoadingSpinner size="sm" />} Create User
+                {createSaving && <LoadingSpinner size="sm" />} Create User
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Edit Roles modal ── */}
+      {editUser && (
+        <Modal title={`Edit roles — ${editUser.name || editUser.email}`} onClose={() => setEditUser(null)}>
+          <div className="space-y-4">
+            <RoleSelector value={editRoles} onChange={setEditRoles} />
+            {editError && <p className="text-sm text-red-600">{editError}</p>}
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setEditUser(null)} className="px-4 py-2 text-sm text-slate-600">Cancel</button>
+              <button onClick={saveRoles}
+                disabled={editSaving || !editRoles.primary}
+                className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
+                {editSaving && <LoadingSpinner size="sm" />} Save roles
               </button>
             </div>
           </div>
@@ -247,39 +324,22 @@ export default function UsersPage() {
   )
 }
 
-function WorkloadColumn({
-  label,
-  items,
-  emptyLabel,
-}: {
-  label: string
-  items: { id: string; name: string; status: string }[]
-  emptyLabel: string
-}) {
+function WorkloadColumn({ label, items }: { label: string; items: { id: string; name: string; status: string }[] }) {
   const active = items.filter(i => i.status === 'ACTIVE')
   const inactive = items.filter(i => i.status !== 'ACTIVE')
   return (
     <div className="px-4 py-3">
       <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">{label}</p>
-      {items.length === 0 ? (
-        <p className="text-xs text-slate-300 italic">{emptyLabel}</p>
-      ) : (
-        <div className="space-y-1">
-          {active.map(item => (
-            <p key={item.id} className="text-xs text-slate-700 truncate" title={item.name}>
-              {item.name}
-            </p>
-          ))}
-          {inactive.map(item => (
-            <p key={item.id} className="text-xs text-slate-400 line-through truncate" title={item.name}>
-              {item.name}
-            </p>
-          ))}
-        </div>
-      )}
-      {items.length > 0 && (
-        <p className="text-xs text-slate-300 mt-1">{active.length} active{inactive.length > 0 ? `, ${inactive.length} inactive` : ''}</p>
-      )}
+      {items.length === 0
+        ? <p className="text-xs text-slate-300 italic">None</p>
+        : (
+          <div className="space-y-1">
+            {active.map(item => <p key={item.id} className="text-xs text-slate-700 truncate" title={item.name}>{item.name}</p>)}
+            {inactive.map(item => <p key={item.id} className="text-xs text-slate-400 line-through truncate" title={item.name}>{item.name}</p>)}
+            <p className="text-xs text-slate-300 mt-1">{active.length} active{inactive.length > 0 ? `, ${inactive.length} inactive` : ''}</p>
+          </div>
+        )
+      }
     </div>
   )
 }
