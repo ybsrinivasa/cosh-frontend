@@ -1,6 +1,17 @@
 import api from './api'
 import type { User, LoginResponse } from '@/types'
 
+export async function requestOtp(email: string): Promise<void> {
+  await api.post('/auth/request-otp', { email })
+}
+
+export async function verifyOtp(email: string, otp_code: string): Promise<void> {
+  const { data } = await api.post<LoginResponse>('/auth/verify-otp', { email, otp_code })
+  localStorage.setItem('cosh_token', data.access_token)
+  const me = await api.get<User>('/auth/me')
+  localStorage.setItem('cosh_user', JSON.stringify(me.data))
+}
+
 export async function login(email: string, password: string): Promise<void> {
   const { data } = await api.post<LoginResponse>('/auth/login', { email, password })
   localStorage.setItem('cosh_token', data.access_token)
