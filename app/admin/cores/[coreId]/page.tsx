@@ -156,8 +156,13 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
 
   async function toggleStatus(item: CoreDataItem) {
     const newStatus = item.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
-    await api.put(`/cores/${coreId}/items/${item.id}/status`, { status: newStatus })
-    load()
+    try {
+      await api.put(`/cores/${coreId}/items/${item.id}/status`, { status: newStatus })
+      load()
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      alert(err.response?.data?.detail || `Failed to ${newStatus === 'INACTIVE' ? 'inactivate' : 'activate'} item`)
+    }
   }
 
   async function addLanguage(code: string) {
