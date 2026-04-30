@@ -46,6 +46,13 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
   const [editingItemSaving, setEditingItemSaving] = useState(false)
   // MEDIA lightbox
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  // Inline translation edit
+  const [editingTranslation, setEditingTranslation] = useState<{ itemId: string; langCode: string } | null>(null)
+  const [editingTranslationValue, setEditingTranslationValue] = useState('')
+  const [savingTranslation, setSavingTranslation] = useState(false)
+  // Per-language translate button state
+  const [translatingLang, setTranslatingLang] = useState<string | null>(null)
+  const [translateMsg, setTranslateMsg] = useState<Record<string, string>>({})
 
   useEffect(() => { load() }, [coreId])
 
@@ -201,6 +208,35 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
       const err = e as { response?: { data?: { detail?: string } } }
       setImportResult(`✗ ${err.response?.data?.detail || 'Import failed'}`)
     } finally { setImportLoading(false) }
+  }
+
+  async function triggerTranslate(langCode: string, mode: 'machine_generated_only' | 'all') {
+    setTranslatingLang(langCode)
+    setTranslateMsg(prev => ({ ...prev, [langCode]: '' }))
+    try {
+      const { data } = await api.put(
+        `/cores/${coreId}/retranslate?lang=${langCode}&mode=${mode}`
+      )
+      setTranslateMsg(prev => ({ ...prev, [langCode]: `✓ ${data.message}` }))
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setTranslateMsg(prev => ({ ...prev, [langCode]: `✗ ${err.response?.data?.detail || 'Failed'}` }))
+    } finally { setTranslatingLang(null) }
+  }
+
+  async function saveTranslationEdit() {
+    if (!editingTranslation || !editingTranslationValue.trim()) return
+    setSavingTranslation(true)
+    try {
+      await api.put(
+        `/cores/${coreId}/items/${editingTranslation.itemId}/translations/${editingTranslation.langCode}?translated_value=${encodeURIComponent(editingTranslationValue.trim())}`
+      )
+      setEditingTranslation(null)
+      load()
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      alert(err.response?.data?.detail || 'Failed to save translation')
+    } finally { setSavingTranslation(false) }
   }
 
   async function uploadCsv() {
@@ -432,17 +468,54 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                         )}
                       </div>
                     </div>
-                    {expandedItem === item.id && item.translations.length > 0 && (
-                      <div className="px-4 pb-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {item.translations.map(t => (
-                          <div key={t.id} className="bg-slate-50 rounded-lg px-3 py-2">
-                            <div className="flex items-center justify-between mb-0.5">
-                              <span className="text-xs font-mono text-slate-500">{t.language_code}</span>
-                              <Badge label={t.validation_status === 'EXPERT_VALIDATED' ? 'Expert' : 'Machine'} variant={t.validation_status} />
-                            </div>
-                            <p className="text-sm text-slate-800">{t.translated_value}</p>
+                    {expandedItem === item.id && (
+                      <div className="px-4 pb-3">
+                        {item.translations.length === 0 ? (
+                          <p className="text-xs text-slate-400 italic">No translations yet — go to Languages tab to trigger translation.</p>
+                        ) : (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {item.translations.map(t => {
+                              const isEditingThis = editingTranslation?.itemId === item.id && editingTranslation?.langCode === t.language_code
+                              return (
+                                <div key={t.id} className="bg-slate-50 rounded-lg px-3 py-2 group">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className="text-xs font-mono text-slate-500">{t.language_code}</span>
+                                    <div className="flex items-center gap-1">
+                                      <Badge label={t.validation_status === 'EXPERT_VALIDATED' ? 'Expert' : 'Machine'} variant={t.validation_status} />
+                                      {canWrite && !isEditingThis && (
+                                        <button
+                                          onClick={() => { setEditingTranslation({ itemId: item.id, langCode: t.language_code }); setEditingTranslationValue(t.translated_value) }}
+                                          className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-green-600 text-xs ml-1"
+                                          title="Edit translation">✎</button>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {isEditingThis ? (
+                                    <div>
+                                      <textarea
+                                        autoFocus
+                                        value={editingTranslationValue}
+                                        onChange={e => setEditingTranslationValue(e.target.value)}
+                                        rows={2}
+                                        className="w-full text-sm border border-green-400 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-500 bg-white resize-none"
+                                      />
+                                      <div className="flex gap-1.5 mt-1">
+                                        <button onClick={saveTranslationEdit} disabled={savingTranslation}
+                                          className="text-xs text-green-700 font-medium hover:text-green-900 disabled:opacity-50">
+                                          {savingTranslation ? '…' : '✓ Save'}
+                                        </button>
+                                        <button onClick={() => setEditingTranslation(null)}
+                                          className="text-xs text-slate-400 hover:text-slate-600">Cancel</button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <p className="text-sm text-slate-800">{t.translated_value}</p>
+                                  )}
+                                </div>
+                              )
+                            })}
                           </div>
-                        ))}
+                        )}
                       </div>
                     )}
                   </div>
@@ -488,6 +561,14 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
+                        {/* Translate button */}
+                        <button
+                          onClick={() => triggerTranslate(l.language_code, 'machine_generated_only')}
+                          disabled={translatingLang === l.language_code}
+                          className="px-3 py-1.5 text-xs font-medium border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50 flex items-center gap-1">
+                          {translatingLang === l.language_code ? <LoadingSpinner size="sm" /> : '⟳'}
+                          Translate
+                        </button>
                         {/* Download button */}
                         <button
                           onClick={() => downloadTranslationCsv(l.language_code, langInfo?.language_name_en || l.language_code)}
@@ -505,6 +586,13 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                         </button>
                       </div>
                     </div>
+
+                    {/* Translate feedback */}
+                    {translateMsg[l.language_code] && (
+                      <div className={`px-4 py-2 text-xs ${translateMsg[l.language_code].startsWith('✓') ? 'text-green-700 bg-green-50' : 'text-red-600 bg-red-50'}`}>
+                        {translateMsg[l.language_code]}
+                      </div>
+                    )}
 
                     {/* Import form — shown when expanded */}
                     {isImporting && (
