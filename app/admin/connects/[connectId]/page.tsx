@@ -596,11 +596,19 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                             {schema.map(p => {
                               const pos = item.positions.find(ip => ip.position_number === p.position_number)
                               const valueId = pos ? getDataPositionValueId(pos) : null
-                              const label = valueId
-                                ? (valueMap[valueId] || valueId.slice(0, 8) + '…')
-                                : '—'
+                              const isInactive = pos && (pos as { item_status?: string }).item_status === 'INACTIVE'
+                              const label = pos && (pos as { display_value?: string }).display_value
+                                ? (pos as { display_value: string }).display_value
+                                : valueId
+                                  ? (valueMap[valueId] || valueId.slice(0, 8) + '…')
+                                  : '—'
                               return (
-                                <td key={p.id} className="px-4 py-3 text-slate-800 font-medium">{label}</td>
+                                <td key={p.id} className="px-4 py-3 font-medium">
+                                  {isInactive
+                                    ? <span className="text-slate-400 line-through" title="This item is inactive">{label}</span>
+                                    : <span className="text-slate-800">{label}</span>
+                                  }
+                                </td>
                               )
                             })}
                             <td className="px-4 py-3">

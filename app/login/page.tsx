@@ -50,8 +50,10 @@ export default function LoginPage() {
       await requestOtp(email)
       setStep('otp')
       setResendTimer(30)
-    } catch {
-      setError('Failed to send code. Please try again.')
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      const detail = err.response?.data?.detail
+      setError(detail || 'Failed to send code. Please try again.')
     } finally {
       setLoading(false)
     }
