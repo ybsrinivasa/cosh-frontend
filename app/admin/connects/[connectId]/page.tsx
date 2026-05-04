@@ -597,8 +597,9 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                               const pos = item.positions.find(ip => ip.position_number === p.position_number)
                               const valueId = pos ? getDataPositionValueId(pos) : null
                               const isInactive = pos && (pos as { item_status?: string }).item_status === 'INACTIVE'
-                              const label = pos && (pos as { display_value?: string }).display_value
-                                ? (pos as { display_value: string }).display_value
+                              const posDisplayValue = pos ? (pos as { display_value?: string }).display_value : undefined
+                              const label = posDisplayValue
+                                ? posDisplayValue
                                 : valueId
                                   ? (valueMap[valueId] || valueId.slice(0, 8) + '…')
                                   : '—'
