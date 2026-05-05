@@ -58,12 +58,15 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
 
   async function load() {
     try {
+      const canManage = hasRole(getStoredUser(), 'DESIGNER', 'ADMIN')
       const [c, i, l, al, st] = await Promise.all([
         api.get(`/cores/${coreId}`),
         api.get(`/cores/${coreId}/items?status_filter=ALL`),
         api.get(`/cores/${coreId}/languages`).catch(() => ({ data: [] })),
         api.get('/admin/registries/languages').catch(() => ({ data: [] })),
-        api.get('/admin/users/by-role/STOCKER').catch(() => ({ data: [] })),
+        canManage
+          ? api.get('/admin/users/by-role/STOCKER').catch(() => ({ data: [] }))
+          : Promise.resolve({ data: [] }),
       ])
       setCore(c.data); setItems(i.data); setLanguages(l.data); setAllLanguages(al.data)
       setStockers(st.data)

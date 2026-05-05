@@ -84,6 +84,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
 
   async function load() {
     try {
+      const canManage = hasRole(getStoredUser(), 'DESIGNER', 'ADMIN')
       const [c, s, i, cr, ct, rt, st] = await Promise.all([
         api.get(`/connects/${connectId}`),
         api.get(`/connects/${connectId}/schema`),
@@ -91,7 +92,9 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
         api.get('/cores'),
         api.get('/connects'),
         api.get('/admin/registries/relationship-types'),
-        api.get('/admin/users/by-role/STOCKER').catch(() => ({ data: [] })),
+        canManage
+          ? api.get('/admin/users/by-role/STOCKER').catch(() => ({ data: [] }))
+          : Promise.resolve({ data: [] }),
       ])
       setConnect(c.data)
       setSchema(s.data)
