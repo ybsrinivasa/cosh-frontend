@@ -102,9 +102,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
           if (!newImageFile) { setError('Please select an image file'); setSaving(false); return }
           const form = new FormData()
           form.append('file', newImageFile)
-          await api.post(`/cores/${coreId}/items/upload-image?name=${encodeURIComponent(newValue.trim())}`, form, {
-            headers: { 'Content-Type': 'multipart/form-data' }
-          })
+          await api.post(`/cores/${coreId}/items/upload-image?name=${encodeURIComponent(newValue.trim())}`, form)
         } else {
           if (!newMediaUrl.trim()) { setError('Image URL is required'); setSaving(false); return }
           await api.post(`/cores/${coreId}/items`, { english_value: newValue.trim(), s3_url: newMediaUrl.trim() })
@@ -203,8 +201,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
     form.append('file', importFile)
     try {
       const { data } = await api.post(
-        `/cores/${coreId}/import-translations?lang=${langCode}`, form,
-        { headers: { 'Content-Type': 'multipart/form-data' } }
+        `/cores/${coreId}/import-translations?lang=${langCode}`, form
       )
       setImportResult(`✓ Updated: ${data.updated} | Skipped: ${data.skipped}${data.errors?.length ? ` | Errors: ${data.errors.length}` : ''}`)
       setImportFile(null)
@@ -250,9 +247,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
     const form = new FormData()
     form.append('file', uploadFile)
     try {
-      const { data } = await api.post(`/cores/${coreId}/items/upload-csv`, form, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
+      const { data } = await api.post(`/cores/${coreId}/items/upload-csv`, form)
       if (isMedia) {
         setUploadResult(`✓ Added: ${data.created} | Skipped (already exist): ${data.skipped_duplicates} | Errors: ${data.errors.length}`)
       } else {

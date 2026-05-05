@@ -310,9 +310,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
     const form = new FormData()
     form.append('file', uploadFile)
     try {
-      const { data } = await api.post(`/connects/${connectId}/items/upload-excel`, form, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
+      const { data } = await api.post(`/connects/${connectId}/items/upload-excel`, form)
       let msg = `✓ Added: ${data.resolved}`
       if (data.skipped_duplicates) msg += ` | Skipped (already exist): ${data.skipped_duplicates}`
       if (data.unresolved) msg += ` | Unresolved: ${data.unresolved}`
