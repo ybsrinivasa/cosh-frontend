@@ -670,7 +670,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
             </div>
           )}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 text-sm text-blue-800">
-            <p className="font-medium mb-1">Excel format</p>
+            <p className="font-medium mb-1">Excel or CSV format</p>
             <p>One column per Core-type schema position, header must match Core name exactly.</p>
             {schema.filter(p => p.node_type !== 'CONNECT').length > 0 && (
               <p className="mt-2 font-mono text-xs bg-blue-100 px-2 py-1 rounded">
@@ -680,7 +680,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
             <p className="mt-1.5 text-xs text-blue-600">Duplicate rows are automatically skipped.</p>
           </div>
           <div className="bg-white border-2 border-dashed border-slate-300 rounded-xl p-8 text-center">
-            <input type="file" accept=".xlsx,.xls"
+            <input type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
               onChange={e => setUploadFile(e.target.files?.[0] || null)}
               className="block w-full text-sm text-slate-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-green-50 file:text-green-700 hover:file:bg-green-100" />
           </div>
@@ -691,7 +691,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                 disabled={uploading || schema.length === 0 || !!(connect.assigned_stocker_id && connect.assigned_stocker_id !== getStoredUser()?.id)}
                 className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
                 {uploading && <LoadingSpinner size="sm" />}
-                {uploading ? 'Processing…' : 'Upload Excel'}
+                {uploading ? 'Processing…' : 'Upload File'}
               </button>
             </div>
           )}
