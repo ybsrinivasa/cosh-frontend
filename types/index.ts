@@ -62,6 +62,13 @@ export interface CoreProductTag {
   entity_type_label: string | null
 }
 
+export interface ConnectProductTag {
+  id: string
+  connect_id: string
+  product_id: string
+  entity_type_label: string | null
+}
+
 export type ValidationStatus = 'MACHINE_GENERATED' | 'EXPERT_VALIDATED'
 
 export interface Translation {

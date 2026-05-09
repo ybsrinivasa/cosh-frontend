@@ -92,6 +92,10 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
   const [savingAssignment, setSavingAssignment] = useState(false)
   const [assignmentMsg, setAssignmentMsg] = useState('')
 
+  // Product tags
+  const [products, setProducts] = useState<{ id: string; name: string }[]>([])
+  const [productTags, setProductTags] = useState<{ id: string; connect_id: string; product_id: string; entity_type_label: string | null }[]>([])
+
   // Value display map: value_id → label (for rendering table cells)
   const [valueMap, setValueMap] = useState<Record<string, string>>({})
 
@@ -100,7 +104,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
   async function load() {
     try {
       const canManage = hasRole(getStoredUser(), 'DESIGNER', 'ADMIN')
-      const [c, s, i, cr, ct, rt, st] = await Promise.all([
+      const [c, s, i, cr, ct, rt, st, prods, ptags] = await Promise.all([
         api.get(`/connects/${connectId}`),
         api.get(`/connects/${connectId}/schema`),
         api.get(`/connects/${connectId}/items`),
@@ -109,6 +113,12 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
         api.get('/admin/registries/relationship-types'),
         canManage
           ? api.get('/admin/users/by-role/STOCKER').catch(() => ({ data: [] }))
+          : Promise.resolve({ data: [] }),
+        canManage
+          ? api.get('/admin/registries/products').catch(() => ({ data: [] }))
+          : Promise.resolve({ data: [] }),
+        canManage
+          ? api.get(`/connects/${connectId}/product-tags`).catch(() => ({ data: [] }))
           : Promise.resolve({ data: [] }),
       ])
       setConnect(c.data)
@@ -119,6 +129,8 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
       setRelTypes(rt.data)
       setStockers(st.data)
       setAssignedStockerId(c.data.assigned_stocker_id || '')
+      setProducts(prods.data)
+      setProductTags(ptags.data)
 
       // Build initial value map: load Core items for Core-type schema positions
       const schema: SchemaPosition[] = s.data
@@ -774,6 +786,70 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
             )}
             {assignmentMsg && (
               <p className={`text-sm mt-2 ${assignmentMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-600'}`}>{assignmentMsg}</p>
+            )}
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl p-5">
+            <h3 className="font-medium text-slate-800 mb-1">Product Tags</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              Tag this Connect to a product so it gets included in syncs to that product.
+              Set a slug (entity_type_label) per tag — that&apos;s what consumers see as the
+              <code className="text-xs px-1 mx-0.5 bg-slate-100 rounded">entity_type</code>
+              in the wire payload.
+            </p>
+            {products.length === 0 ? (
+              <p className="text-xs text-slate-400">No products defined. Ask an Admin to add one in Registries → Products.</p>
+            ) : (
+              <div className="space-y-3">
+                {products.map(p => {
+                  const tag = productTags.find(t => t.product_id === p.id)
+                  return (
+                    <div key={p.id} className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={!!tag}
+                        onChange={async () => {
+                          try {
+                            if (tag) {
+                              if (!confirm(`Untag "${connect.name}" from "${p.name}"? It will stop being included in that product's syncs.`)) return
+                              await api.delete(`/connects/${connectId}/product-tags/${p.id}`)
+                            } else {
+                              await api.post(`/connects/${connectId}/product-tags?product_id=${p.id}`)
+                            }
+                            load()
+                          } catch (e: unknown) {
+                            const err = e as { response?: { data?: { detail?: string } } }
+                            alert(err.response?.data?.detail || 'Failed to update tag')
+                          }
+                        }}
+                        className="w-4 h-4"
+                      />
+                      <span className="font-medium text-slate-700 w-40 truncate" title={p.name}>{p.name}</span>
+                      <input
+                        type="text"
+                        disabled={!tag}
+                        defaultValue={tag?.entity_type_label || ''}
+                        placeholder={tag ? 'entity_type_label (slug)' : '— tag first —'}
+                        onBlur={async (e) => {
+                          if (!tag) return
+                          const newLabel = e.target.value.trim()
+                          if (newLabel === (tag.entity_type_label || '')) return
+                          try {
+                            await api.put(
+                              `/sync/${p.id}/entities/${connectId}/label?entity_type_label=${encodeURIComponent(newLabel)}`
+                            )
+                            load()
+                          } catch (err: unknown) {
+                            const x = err as { response?: { data?: { detail?: string } } }
+                            alert(x.response?.data?.detail || 'Failed to save label')
+                          }
+                        }}
+                        className="flex-1 border border-slate-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-slate-50 disabled:text-slate-400"
+                      />
+                    </div>
+                  )
+                })}
+              </div>
             )}
           </div>
 
