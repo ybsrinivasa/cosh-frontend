@@ -353,8 +353,18 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
       }
       load()
     } catch (e: unknown) {
-      const err = e as { response?: { data?: { detail?: string } } }
-      setUploadResult(`✗ ${err.response?.data?.detail || 'Upload failed'}`)
+      const err = e as { response?: { status?: number; data?: { detail?: string } }; code?: string }
+      let detail = err.response?.data?.detail
+      if (!detail) {
+        if (err.response?.status === 504 || err.response?.status === 502 || err.code === 'ECONNABORTED') {
+          detail = 'Upload timed out — the server took too long to process this file. Try a smaller file or contact admin.'
+        } else if (err.response?.status === 413) {
+          detail = 'File too large for the server.'
+        } else {
+          detail = `Upload failed${err.response?.status ? ` (HTTP ${err.response.status})` : ''}`
+        }
+      }
+      setUploadResult(`✗ ${detail}`)
     } finally { setUploading(false) }
   }
 
