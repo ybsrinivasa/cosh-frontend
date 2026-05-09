@@ -244,15 +244,34 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
   async function cleanupAllGroups() {
     if (!dupData) return
     if (!confirm(`Inactivate ${dupData.total_extra_items} duplicate(s) across ${dupData.total_groups} group(s)? The oldest row of each group is kept. This cannot be undone via the UI.`)) return
-    setDupCleanupAllBusy(true); setDupCleanupMsg('')
+    setDupCleanupAllBusy(true); setDupCleanupMsg('Starting cleanup…')
+    let totalInactivated = 0
     try {
-      const { data } = await api.post(`/connects/${connectId}/duplicates/cleanup`, { all: true })
-      setDupCleanupMsg(`✓ Inactivated ${data.items_inactivated} duplicate(s) across ${data.groups_processed} group(s)`)
+      // Server processes up to 2000 per request; loop until has_more=false.
+      // Already-INACTIVE rows are skipped on each call, so this is idempotent.
+      while (true) {
+        const { data } = await api.post(`/connects/${connectId}/duplicates/cleanup`, { all: true })
+        totalInactivated += data.items_inactivated
+        if (data.has_more) {
+          setDupCleanupMsg(`⏳ Inactivated ${totalInactivated} so far, ${data.remaining} remaining…`)
+        } else {
+          break
+        }
+      }
+      setDupCleanupMsg(`✓ Inactivated ${totalInactivated} duplicate(s)`)
       await loadDuplicates()
       await load()
     } catch (e: unknown) {
-      const err = e as { response?: { data?: { detail?: string } } }
-      setDupCleanupMsg(`✗ ${err.response?.data?.detail || 'Cleanup failed'}`)
+      const err = e as { response?: { status?: number; data?: { detail?: string } }; code?: string }
+      let detail = err.response?.data?.detail
+      if (!detail) {
+        if (err.response?.status === 504 || err.response?.status === 502 || err.code === 'ECONNABORTED') {
+          detail = `Request timed out after inactivating ${totalInactivated} so far. Click Clean up all again to continue — partial progress is preserved.`
+        } else {
+          detail = `Cleanup failed${err.response?.status ? ` (HTTP ${err.response.status})` : ''}`
+        }
+      }
+      setDupCleanupMsg(`✗ ${detail}`)
     } finally {
       setDupCleanupAllBusy(false)
     }
@@ -883,7 +902,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                 <>
                   {dupData.groups.length < dupData.total_groups && (
                     <div className="text-xs text-slate-500 mb-2">
-                      Showing top {dupData.groups.length} of {dupData.total_groups} groups, sorted by count. &quot;Clean up all&quot; processes every group, not just the displayed ones.
+                      Showing top {dupData.groups.length.toLocaleString()} of {dupData.total_groups.toLocaleString()} groups, sorted by count. &quot;Clean up all&quot; processes every group, not just the displayed ones.
                     </div>
                   )}
                   <div className="space-y-3">
