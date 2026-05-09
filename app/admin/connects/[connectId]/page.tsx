@@ -479,7 +479,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
         ) : (
           <PageHeader
             title={connect.name}
-            subtitle={connect.description || `${items.length} data row${items.length !== 1 ? 's' : ''} · ${schema.length} position${schema.length !== 1 ? 's' : ''}`}
+            subtitle={connect.description || `${items.filter(i => i.status === 'ACTIVE').length} data row${items.filter(i => i.status === 'ACTIVE').length !== 1 ? 's' : ''} · ${schema.length} position${schema.length !== 1 ? 's' : ''}`}
             action={
               <div className="flex gap-2 items-center">
                 {hasRole(getStoredUser(), 'DESIGNER', 'ADMIN') && (
@@ -500,7 +500,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
           .map(t => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-4 py-2 text-sm font-medium transition-colors ${tab === t ? 'border-b-2 border-green-600 text-green-600' : 'text-slate-500 hover:text-slate-700'}`}>
-              {t === 'schema' ? 'Schema' : t === 'data' ? `Data (${items.length})` : t === 'upload' ? 'Excel Upload' : t === 'duplicates' ? 'Duplicates' : 'Settings'}
+              {t === 'schema' ? 'Schema' : t === 'data' ? `Data (${items.filter(i => i.status === 'ACTIVE').length})` : t === 'upload' ? 'Excel Upload' : t === 'duplicates' ? 'Duplicates' : 'Settings'}
             </button>
           ))}
       </div>
