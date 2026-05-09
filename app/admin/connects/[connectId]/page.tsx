@@ -55,7 +55,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
   const [relTypes, setRelTypes] = useState<RelationshipType[]>([])
   const [stockers, setStockers] = useState<StockerUser[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'schema' | 'data' | 'upload' | 'settings'>('schema')
+  const [tab, setTab] = useState<'schema' | 'data' | 'upload' | 'duplicates' | 'settings'>('schema')
 
   // Combobox items — keyed by positionKey (core_id or connect_ref_id)
   const [posItemsMap, setPosItemsMap] = useState<Record<string, ComboboxItem[]>>({})
@@ -95,6 +95,17 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
   // Product tags
   const [products, setProducts] = useState<{ id: string; name: string }[]>([])
   const [productTags, setProductTags] = useState<{ id: string; connect_id: string; product_id: string; entity_type_label: string | null }[]>([])
+
+  // Duplicates tab
+  type DuplicateRow = { cdi_id: string; created_at: string | null; legacy_created_by_name: string | null; position_values: { position_number: number; label: string; value: string }[] }
+  type DuplicateGroup = { fingerprint: string; count: number; rows: DuplicateRow[] }
+  type DuplicatesResp = { total_groups: number; total_extra_items: number; skip: number; limit: number; groups: DuplicateGroup[] }
+  const [dupData, setDupData] = useState<DuplicatesResp | null>(null)
+  const [dupLoading, setDupLoading] = useState(false)
+  const [dupError, setDupError] = useState('')
+  const [dupBusyFingerprint, setDupBusyFingerprint] = useState<string | null>(null)
+  const [dupCleanupAllBusy, setDupCleanupAllBusy] = useState(false)
+  const [dupCleanupMsg, setDupCleanupMsg] = useState('')
 
   // Value display map: value_id → label (for rendering table cells)
   const [valueMap, setValueMap] = useState<Record<string, string>>({})
@@ -196,6 +207,56 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
   useEffect(() => {
     if (tab === 'data') loadPosItems()
   }, [tab, loadPosItems])
+
+  const loadDuplicates = useCallback(async () => {
+    setDupLoading(true); setDupError(''); setDupCleanupMsg('')
+    try {
+      const { data } = await api.get(`/connects/${connectId}/duplicates`, { params: { skip: 0, limit: 100 } })
+      setDupData(data)
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setDupError(err.response?.data?.detail || 'Failed to load duplicates')
+    } finally {
+      setDupLoading(false)
+    }
+  }, [connectId])
+
+  useEffect(() => {
+    if (tab === 'duplicates') loadDuplicates()
+  }, [tab, loadDuplicates])
+
+  async function cleanupOneGroup(fp: string) {
+    if (!confirm('Inactivate all duplicates in this group, keeping the oldest? This cannot be undone via the UI.')) return
+    setDupBusyFingerprint(fp); setDupCleanupMsg('')
+    try {
+      const { data } = await api.post(`/connects/${connectId}/duplicates/cleanup`, { fingerprint: fp })
+      setDupCleanupMsg(`✓ Inactivated ${data.items_inactivated} duplicate(s) in 1 group`)
+      await loadDuplicates()
+      await load()
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setDupCleanupMsg(`✗ ${err.response?.data?.detail || 'Cleanup failed'}`)
+    } finally {
+      setDupBusyFingerprint(null)
+    }
+  }
+
+  async function cleanupAllGroups() {
+    if (!dupData) return
+    if (!confirm(`Inactivate ${dupData.total_extra_items} duplicate(s) across ${dupData.total_groups} group(s)? The oldest row of each group is kept. This cannot be undone via the UI.`)) return
+    setDupCleanupAllBusy(true); setDupCleanupMsg('')
+    try {
+      const { data } = await api.post(`/connects/${connectId}/duplicates/cleanup`, { all: true })
+      setDupCleanupMsg(`✓ Inactivated ${data.items_inactivated} duplicate(s) across ${data.groups_processed} group(s)`)
+      await loadDuplicates()
+      await load()
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setDupCleanupMsg(`✗ ${err.response?.data?.detail || 'Cleanup failed'}`)
+    } finally {
+      setDupCleanupAllBusy(false)
+    }
+  }
 
   const activeCores = cores.filter(c => c.status === 'ACTIVE')
   const activeConnects = allConnects.filter(c => c.status === 'ACTIVE')
@@ -415,12 +476,12 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 border-b border-slate-200">
-        {(['schema', 'data', 'upload', 'settings'] as const)
+        {(['schema', 'data', 'upload', 'duplicates', 'settings'] as const)
           .filter(t => !(t === 'settings' && connect.assigned_stocker_id === getStoredUser()?.id))
           .map(t => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-4 py-2 text-sm font-medium transition-colors ${tab === t ? 'border-b-2 border-green-600 text-green-600' : 'text-slate-500 hover:text-slate-700'}`}>
-              {t === 'schema' ? 'Schema' : t === 'data' ? `Data (${items.length})` : t === 'upload' ? 'Excel Upload' : 'Settings'}
+              {t === 'schema' ? 'Schema' : t === 'data' ? `Data (${items.length})` : t === 'upload' ? 'Excel Upload' : t === 'duplicates' ? 'Duplicates' : 'Settings'}
             </button>
           ))}
       </div>
@@ -770,6 +831,99 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
             <pre className="mt-2 p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 overflow-auto max-h-48 whitespace-pre-wrap">
               {uploadErrors}
             </pre>
+          )}
+        </div>
+      )}
+
+      {/* ── Duplicates tab ──────────────────────────────────────────────────── */}
+      {tab === 'duplicates' && (
+        <div>
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 text-sm text-blue-800">
+            <p className="font-medium mb-1">Duplicate detection</p>
+            <p>Groups of rows with identical position values. Cleanup keeps the oldest row of each group and inactivates the rest. Inactivated rows aren&apos;t deleted — they&apos;re hidden and excluded from sync.</p>
+          </div>
+
+          {dupLoading && (
+            <div className="flex items-center gap-2 text-sm text-slate-600 py-6"><LoadingSpinner size="sm" /> Scanning for duplicates…</div>
+          )}
+          {dupError && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700 mb-4">{dupError}</div>
+          )}
+
+          {!dupLoading && !dupError && dupData && (
+            <>
+              <div className="flex items-center justify-between bg-white border border-slate-200 rounded-xl px-5 py-4 mb-4">
+                <div>
+                  <p className="text-sm text-slate-500">Duplicate groups</p>
+                  <p className="text-2xl font-semibold text-slate-800">{dupData.total_groups.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500">Rows that would be inactivated</p>
+                  <p className="text-2xl font-semibold text-slate-800">{dupData.total_extra_items.toLocaleString()}</p>
+                </div>
+                <button onClick={cleanupAllGroups}
+                  disabled={dupCleanupAllBusy || dupData.total_groups === 0}
+                  className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2">
+                  {dupCleanupAllBusy && <LoadingSpinner size="sm" />}
+                  {dupCleanupAllBusy ? 'Cleaning…' : 'Clean up all'}
+                </button>
+              </div>
+
+              {dupCleanupMsg && (
+                <div className={`mb-4 p-3 rounded-lg text-sm font-medium ${dupCleanupMsg.startsWith('✓') ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                  {dupCleanupMsg}
+                </div>
+              )}
+
+              {dupData.total_groups === 0 ? (
+                <div className="text-sm text-slate-500 py-8 text-center bg-white border border-slate-200 rounded-xl">
+                  No duplicate groups in this Connect.
+                </div>
+              ) : (
+                <>
+                  {dupData.groups.length < dupData.total_groups && (
+                    <div className="text-xs text-slate-500 mb-2">
+                      Showing top {dupData.groups.length} of {dupData.total_groups} groups, sorted by count. &quot;Clean up all&quot; processes every group, not just the displayed ones.
+                    </div>
+                  )}
+                  <div className="space-y-3">
+                    {dupData.groups.map(g => (
+                      <div key={g.fingerprint} className="bg-white border border-slate-200 rounded-xl p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3 text-sm flex-wrap">
+                            {g.rows[0].position_values.map(pv => (
+                              <span key={pv.position_number} className="inline-flex items-center gap-1.5 px-2 py-1 bg-slate-50 border border-slate-200 rounded-md">
+                                <span className="text-slate-500 text-xs">{pv.label}:</span>
+                                <span className="font-medium text-slate-800">{pv.value}</span>
+                              </span>
+                            ))}
+                            <span className="px-2 py-1 bg-amber-100 text-amber-800 text-xs font-medium rounded-md">× {g.count}</span>
+                          </div>
+                          <button onClick={() => cleanupOneGroup(g.fingerprint)}
+                            disabled={dupBusyFingerprint === g.fingerprint || dupCleanupAllBusy}
+                            className="px-3 py-1.5 bg-red-50 text-red-700 border border-red-200 text-xs font-medium rounded-lg hover:bg-red-100 disabled:opacity-50 flex items-center gap-1.5">
+                            {dupBusyFingerprint === g.fingerprint && <LoadingSpinner size="sm" />}
+                            Inactivate {g.count - 1} duplicate{g.count - 1 === 1 ? '' : 's'}
+                          </button>
+                        </div>
+                        <div className="text-xs text-slate-500 space-y-1">
+                          {g.rows.map((r, idx) => (
+                            <div key={r.cdi_id} className="flex items-center gap-2">
+                              <span className={`inline-block w-14 text-center px-1.5 py-0.5 rounded ${idx === 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                                {idx === 0 ? 'Keep' : 'Drop'}
+                              </span>
+                              <span className="font-mono text-[11px] text-slate-400">{r.cdi_id.slice(0, 8)}</span>
+                              {r.created_at && <span>created {new Date(r.created_at).toLocaleString()}</span>}
+                              {r.legacy_created_by_name && <span>by {r.legacy_created_by_name}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
           )}
         </div>
       )}
