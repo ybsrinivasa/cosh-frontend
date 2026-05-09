@@ -8,14 +8,24 @@ import Badge from '@/components/ui/Badge'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import AccessDenied from '@/components/ui/AccessDenied'
 
+interface TaggedEntity {
+  entity_id: string
+  entity_kind: 'CORE' | 'CONNECT'
+  entity_name: string
+  entity_type_label: string | null
+  core_type?: string
+}
+
 export default function SyncPage() {
   const [products, setProducts] = useState<ProductSyncState[]>([])
   const [selected, setSelected] = useState<string>('')
   const [changeTable, setChangeTable] = useState<ChangeTable | null>(null)
+  const [taggedEntities, setTaggedEntities] = useState<TaggedEntity[]>([])
   const [history, setHistory] = useState<SyncHistory[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingChanges, setLoadingChanges] = useState(false)
   const [selectedEntities, setSelectedEntities] = useState<Set<string>>(new Set())
+  const [selectedFullEntities, setSelectedFullEntities] = useState<Set<string>>(new Set())
   const [syncMode, setSyncMode] = useState<'FULL' | 'INCREMENTAL'>('INCREMENTAL')
   const [dispatching, setDispatching] = useState(false)
   const [dispatchResult, setDispatchResult] = useState('')
@@ -37,11 +47,14 @@ export default function SyncPage() {
     setSelected(productId); setSelectedEntities(new Set()); setDispatchResult('')
     setLoadingChanges(true)
     try {
-      const [ch, hi] = await Promise.all([
+      const [ch, hi, te] = await Promise.all([
         api.get(`/sync/${productId}/changes`),
         api.get(`/sync/${productId}/history`),
+        api.get(`/sync/${productId}/tagged-entities`).catch(() => ({ data: [] })),
       ])
-      setChangeTable(ch.data); setHistory(hi.data)
+      setChangeTable(ch.data); setHistory(hi.data); setTaggedEntities(te.data)
+      // FULL mode default = everything tagged is selected (mirrors old behaviour)
+      setSelectedFullEntities(new Set(te.data.map((e: TaggedEntity) => e.entity_id)))
     } finally { setLoadingChanges(false) }
   }
 
@@ -51,15 +64,26 @@ export default function SyncPage() {
     setSelectedEntities(next)
   }
 
+  function toggleFullEntity(id: string) {
+    const next = new Set(selectedFullEntities)
+    next.has(id) ? next.delete(id) : next.add(id)
+    setSelectedFullEntities(next)
+  }
+
   async function dispatch() {
     if (!selected) return
     setDispatching(true); setDispatchResult('')
     try {
-      const sendAll = syncMode === 'FULL'
+      // FULL: if user picked the full set, send_all=true (preserves tombstoning intent
+      // for the whole product universe). If user picked a subset, send entity_ids
+      // explicitly so other tagged entities aren't touched.
+      const fullSendAll = syncMode === 'FULL' && selectedFullEntities.size === taggedEntities.length
       const { data } = await api.post(`/sync/${selected}/dispatch`, {
         sync_mode: syncMode,
-        entity_ids: sendAll ? [] : Array.from(selectedEntities),
-        send_all: sendAll,
+        entity_ids: fullSendAll
+          ? []
+          : Array.from(syncMode === 'FULL' ? selectedFullEntities : selectedEntities),
+        send_all: fullSendAll,
       })
       setDispatchResult(`✓ Dispatched — sync ID: ${data.sync_id} | ${data.message}`)
       if (data.auto_added_dependencies?.length) {
@@ -99,12 +123,14 @@ export default function SyncPage() {
 
       {selected && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Change table */}
+          {/* Centre panel — Pending Changes (Incremental) or Tagged Entities (Full) */}
           <div className="lg:col-span-2">
             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
               <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between">
-                <h2 className="font-medium text-slate-800">Pending Changes</h2>
-                {changeTable && (
+                <h2 className="font-medium text-slate-800">
+                  {syncMode === 'FULL' ? 'Tagged Entities — pick what to send' : 'Pending Changes'}
+                </h2>
+                {syncMode === 'INCREMENTAL' && changeTable && (
                   <button onClick={() => {
                     const all = new Set(changeTable.entities.map(e => e.entity_id))
                     setSelectedEntities(selectedEntities.size === all.size ? new Set() : all)
@@ -112,29 +138,65 @@ export default function SyncPage() {
                     {selectedEntities.size === (changeTable?.entities.length || 0) ? 'Deselect all' : 'Select all'}
                   </button>
                 )}
+                {syncMode === 'FULL' && taggedEntities.length > 0 && (
+                  <button onClick={() => {
+                    const all = new Set(taggedEntities.map(e => e.entity_id))
+                    setSelectedFullEntities(selectedFullEntities.size === all.size ? new Set() : all)
+                  }} className="text-sm text-green-600 hover:underline">
+                    {selectedFullEntities.size === taggedEntities.length ? 'Deselect all' : 'Select all'}
+                  </button>
+                )}
               </div>
+
               {loadingChanges ? (
                 <div className="flex justify-center py-8"><LoadingSpinner /></div>
-              ) : !changeTable || changeTable.entities.length === 0 ? (
-                <p className="text-center py-8 text-slate-400 text-sm">No pending changes</p>
+              ) : syncMode === 'INCREMENTAL' ? (
+                !changeTable || changeTable.entities.length === 0 ? (
+                  <p className="text-center py-8 text-slate-400 text-sm">No pending changes</p>
+                ) : (
+                  changeTable.entities.map(entity => (
+                    <div key={entity.entity_id} onClick={() => toggleEntity(entity.entity_id)}
+                      className={`flex items-center justify-between px-5 py-3 border-b border-slate-100 last:border-0 cursor-pointer transition-colors ${selectedEntities.has(entity.entity_id) ? 'bg-green-50' : 'hover:bg-slate-50'}`}>
+                      <div className="flex items-center gap-3">
+                        <input type="checkbox" readOnly checked={selectedEntities.has(entity.entity_id)}
+                          className="rounded border-slate-300 text-green-600" />
+                        <div>
+                          <p className="text-sm font-medium text-slate-800">{entity.entity_name}</p>
+                          <div className="flex gap-1 mt-0.5">
+                            <Badge label={entity.entity_category} />
+                            {entity.change_types.map(ct => <Badge key={ct} label={ct} />)}
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-xs text-slate-400">{entity.item_count} item{entity.item_count !== 1 ? 's' : ''}</span>
+                    </div>
+                  ))
+                )
               ) : (
-                changeTable.entities.map(entity => (
-                  <div key={entity.entity_id} onClick={() => toggleEntity(entity.entity_id)}
-                    className={`flex items-center justify-between px-5 py-3 border-b border-slate-100 last:border-0 cursor-pointer transition-colors ${selectedEntities.has(entity.entity_id) ? 'bg-green-50' : 'hover:bg-slate-50'}`}>
-                    <div className="flex items-center gap-3">
-                      <input type="checkbox" readOnly checked={selectedEntities.has(entity.entity_id)}
-                        className="rounded border-slate-300 text-green-600" />
-                      <div>
-                        <p className="text-sm font-medium text-slate-800">{entity.entity_name}</p>
-                        <div className="flex gap-1 mt-0.5">
-                          <Badge label={entity.entity_category} />
-                          {entity.change_types.map(ct => <Badge key={ct} label={ct} />)}
+                taggedEntities.length === 0 ? (
+                  <p className="text-center py-8 text-slate-400 text-sm">No entities tagged to this product yet — tag a Core or Connect first.</p>
+                ) : (
+                  taggedEntities.map(entity => (
+                    <div key={entity.entity_id} onClick={() => toggleFullEntity(entity.entity_id)}
+                      className={`flex items-center justify-between px-5 py-3 border-b border-slate-100 last:border-0 cursor-pointer transition-colors ${selectedFullEntities.has(entity.entity_id) ? 'bg-green-50' : 'hover:bg-slate-50'}`}>
+                      <div className="flex items-center gap-3">
+                        <input type="checkbox" readOnly checked={selectedFullEntities.has(entity.entity_id)}
+                          className="rounded border-slate-300 text-green-600" />
+                        <div>
+                          <p className="text-sm font-medium text-slate-800">{entity.entity_name}</p>
+                          <div className="flex gap-1 mt-0.5">
+                            <Badge label={entity.entity_kind} />
+                            {entity.entity_type_label && (
+                              <span className="text-xs font-mono text-slate-500 bg-slate-50 border border-slate-200 px-1.5 rounded">
+                                {entity.entity_type_label}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
-                    <span className="text-xs text-slate-400">{entity.item_count} item{entity.item_count !== 1 ? 's' : ''}</span>
-                  </div>
-                ))
+                  ))
+                )
               )}
             </div>
           </div>
@@ -154,16 +216,26 @@ export default function SyncPage() {
                   ))}
                 </div>
                 <p className="text-xs text-slate-400 mt-1.5">
-                  {syncMode === 'FULL' ? 'Sends all active items — use for first sync or cache reset' : 'Sends only changed items since last sync'}
+                  {syncMode === 'FULL'
+                    ? 'Sends all active items of the selected entities. Tick everything for a true full reset, or pick a subset to surgically push only those entities.'
+                    : 'Sends only changed items since last sync'}
                 </p>
               </div>
-              {syncMode === 'INCREMENTAL' && (
+              {syncMode === 'INCREMENTAL' ? (
                 <p className="text-xs text-slate-500 mb-3">
                   {selectedEntities.size} of {changeTable?.entities.length || 0} entities selected
                 </p>
+              ) : (
+                <p className="text-xs text-slate-500 mb-3">
+                  {selectedFullEntities.size} of {taggedEntities.length} tagged entities selected
+                </p>
               )}
               <button onClick={dispatch}
-                disabled={dispatching || (syncMode === 'INCREMENTAL' && selectedEntities.size === 0)}
+                disabled={
+                  dispatching ||
+                  (syncMode === 'INCREMENTAL' && selectedEntities.size === 0) ||
+                  (syncMode === 'FULL' && selectedFullEntities.size === 0)
+                }
                 className="w-full py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2">
                 {dispatching && <LoadingSpinner size="sm" />}
                 {dispatching ? 'Dispatching…' : 'Dispatch Sync'}
