@@ -118,6 +118,7 @@ export interface SchemaPosition {
   connect_ref_id: string | null
   connect_ref_name: string | null
   relationship_type_to_next: string | null
+  position_label: string | null
 }
 
 export interface ConnectDataPosition {

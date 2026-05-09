@@ -18,15 +18,30 @@ interface SchemaBuilderPos {
   core_id: string
   connect_ref_id: string
   relationship_type_to_next: string
+  position_label: string
 }
 
 function positionKey(pos: SchemaPosition): string {
   return pos.node_type === 'CONNECT' ? (pos.connect_ref_id || '') : (pos.core_id || '')
 }
 
-function positionLabel(pos: SchemaPosition): string {
+function baseName(pos: SchemaPosition): string {
   if (pos.node_type === 'CONNECT') return pos.connect_ref_name || pos.connect_ref_id || `Position ${pos.position_number}`
   return pos.core_name || pos.core_id || `Position ${pos.position_number}`
+}
+
+function positionLabel(pos: SchemaPosition, schema?: SchemaPosition[]): string {
+  if (pos.position_label && pos.position_label.trim()) return pos.position_label.trim()
+  const name = baseName(pos)
+  if (!schema) return name
+  // Auto-disambiguate: when the same Core/Connect appears in multiple unlabelled
+  // positions, append (2), (3), … by position order so each shows distinctly.
+  const peers = schema
+    .filter(p => !(p.position_label && p.position_label.trim()) && baseName(p) === name)
+    .sort((a, b) => a.position_number - b.position_number)
+  if (peers.length <= 1) return name
+  const idx = peers.findIndex(p => p.position_number === pos.position_number)
+  return idx <= 0 ? name : `${name} (${idx + 1})`
 }
 
 export default function ConnectDetailPage({ params }: { params: Promise<{ connectId: string }> }) {
@@ -60,8 +75,8 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
 
   // Schema builder
   const [positions, setPositions] = useState<SchemaBuilderPos[]>([
-    { node_type: 'CORE', core_id: '', connect_ref_id: '', relationship_type_to_next: '' },
-    { node_type: 'CORE', core_id: '', connect_ref_id: '', relationship_type_to_next: '' },
+    { node_type: 'CORE', core_id: '', connect_ref_id: '', relationship_type_to_next: '', position_label: '' },
+    { node_type: 'CORE', core_id: '', connect_ref_id: '', relationship_type_to_next: '', position_label: '' },
   ])
   const [savingSchema, setSavingSchema] = useState(false)
   const [schemaError, setSchemaError] = useState('')
@@ -213,7 +228,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
     setSaveError(''); setSaveSuccess('')
     for (const pos of schema) {
       if (!selection[pos.position_number]) {
-        setSaveError(`Please select a value for "${positionLabel(pos)}"`)
+        setSaveError(`Please select a value for "${positionLabel(pos, schema)}"`)
         return
       }
     }
@@ -255,7 +270,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
   // ── Schema builder helpers ────────────────────────────────────────────────
 
   function addPosition() {
-    setPositions(prev => [...prev, { node_type: 'CORE', core_id: '', connect_ref_id: '', relationship_type_to_next: '' }])
+    setPositions(prev => [...prev, { node_type: 'CORE', core_id: '', connect_ref_id: '', relationship_type_to_next: '', position_label: '' }])
   }
 
   function removePosition(idx: number) {
@@ -294,6 +309,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
       core_id: p.node_type === 'CORE' ? p.core_id : null,
       connect_ref_id: p.node_type === 'CONNECT' ? p.connect_ref_id : null,
       relationship_type_to_next: i < positions.length - 1 ? p.relationship_type_to_next : null,
+      position_label: p.position_label.trim() || null,
     }))
     setSavingSchema(true)
     try {
@@ -400,7 +416,27 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                         Position {pos.position_number}
                         {pos.node_type === 'CONNECT' && <span className="ml-1 text-violet-500 font-medium">· Connect</span>}
                       </p>
-                      <p className="text-sm font-semibold text-slate-800">{positionLabel(pos)}</p>
+                      <p className="text-sm font-semibold text-slate-800">{positionLabel(pos, schema)}</p>
+                      {hasRole(getStoredUser(), 'DESIGNER', 'ADMIN') && (
+                        <input
+                          type="text"
+                          defaultValue={pos.position_label || ''}
+                          placeholder="Set label…"
+                          onBlur={async (e) => {
+                            const newLabel = e.target.value.trim()
+                            if (newLabel === (pos.position_label || '')) return
+                            try {
+                              await api.put(`/connects/${connectId}/schema/${pos.id}/label`,
+                                { position_label: newLabel || null })
+                              load()
+                            } catch (err: unknown) {
+                              const x = err as { response?: { data?: { detail?: string } } }
+                              alert(x.response?.data?.detail || 'Failed to save label')
+                            }
+                          }}
+                          className="mt-2 w-full border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-500"
+                        />
+                      )}
                     </div>
                     {idx < schema.length - 1 && (
                       <div className="flex flex-col items-center mx-3">
@@ -414,7 +450,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                 ))}
               </div>
               {connect.schema_finalised
-                ? <p className="text-xs text-slate-400">🔒 Schema is locked — data rows have been added</p>
+                ? <p className="text-xs text-slate-400">🔒 Schema is locked — data rows have been added. Labels can still be edited.</p>
                 : <p className="text-xs text-slate-400">Schema will lock when the first data row is added</p>
               }
             </div>
@@ -456,6 +492,14 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                             {activeConnects.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                           </select>
                         )}
+
+                        <input
+                          type="text"
+                          value={pos.position_label}
+                          onChange={e => updatePos(idx, 'position_label', e.target.value)}
+                          placeholder="Label (optional, e.g. 'Pest Name'). Use this when the same Core appears more than once in the schema."
+                          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                        />
                       </div>
 
                       {positions.length > 2 && (
@@ -520,7 +564,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                       <div key={pos.id}>
                         <div className="flex items-center gap-3">
                           <div className="w-36 flex-shrink-0">
-                            <p className="text-xs font-medium text-slate-500 truncate">{positionLabel(pos)}</p>
+                            <p className="text-xs font-medium text-slate-500 truncate">{positionLabel(pos, schema)}</p>
                             {pos.node_type === 'CONNECT' && (
                               <p className="text-xs text-violet-400">Connect</p>
                             )}
@@ -530,7 +574,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                               items={posItemsMap[positionKey(pos)] || []}
                               value={selection[pos.position_number] || ''}
                               onChange={id => setPos(pos.position_number, id)}
-                              placeholder={posItemsLoading ? 'Loading…' : `Search ${positionLabel(pos)}…`}
+                              placeholder={posItemsLoading ? 'Loading…' : `Search ${positionLabel(pos, schema)}…`}
                               loading={posItemsLoading}
                             />
                           </div>
@@ -582,7 +626,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                           <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 w-10">#</th>
                           {schema.map(p => (
                             <th key={p.id} className="text-left px-4 py-2.5 text-xs font-medium text-slate-500">
-                              {positionLabel(p)}
+                              {positionLabel(p, schema)}
                               {p.node_type === 'CONNECT' && <span className="ml-1 text-violet-400">↗</span>}
                             </th>
                           ))}
