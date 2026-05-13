@@ -86,6 +86,8 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
   const [uploadResult, setUploadResult] = useState('')
   const [uploadErrors, setUploadErrors] = useState('')
   const [uploading, setUploading] = useState(false)
+  type UploadColumn = { col_name: string; target_pos: number; ref_pos: number | null; is_connect_sub: boolean }
+  const [uploadColumns, setUploadColumns] = useState<UploadColumn[]>([])
 
   // Stocker assignment
   const [assignedStockerId, setAssignedStockerId] = useState('')
@@ -115,7 +117,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
   async function load() {
     try {
       const canManage = hasRole(getStoredUser(), 'DESIGNER', 'ADMIN')
-      const [c, s, i, cr, ct, rt, st, prods, ptags] = await Promise.all([
+      const [c, s, i, cr, ct, rt, st, prods, ptags, ucols] = await Promise.all([
         api.get(`/connects/${connectId}`),
         api.get(`/connects/${connectId}/schema`),
         api.get(`/connects/${connectId}/items`),
@@ -131,6 +133,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
         canManage
           ? api.get(`/connects/${connectId}/product-tags`).catch(() => ({ data: [] }))
           : Promise.resolve({ data: [] }),
+        api.get(`/connects/${connectId}/upload-columns`).catch(() => ({ data: { columns: [] } })),
       ])
       setConnect(c.data)
       setSchema(s.data)
@@ -142,6 +145,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
       setAssignedStockerId(c.data.assigned_stocker_id || '')
       setProducts(prods.data)
       setProductTags(ptags.data)
+      setUploadColumns(ucols.data?.columns || [])
 
       // Build initial value map: load Core items for Core-type schema positions
       const schema: SchemaPosition[] = s.data
@@ -812,18 +816,18 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
           )}
           {schema.some(p => p.node_type === 'CONNECT') && (
             <div className="bg-violet-50 border border-violet-200 rounded-xl p-4 mb-4 text-sm text-violet-800">
-              ℹ️ This Connect has Connect-type positions. Excel upload only supports Core-type positions — use manual entry for rows involving Connect references.
+              ℹ️ This Connect has Connect-type positions. Each one expands into one column per position of the referenced Connect (listed below). The row in the referenced Connect must already exist and be ACTIVE — its column values are used to find it.
             </div>
           )}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 text-sm text-blue-800">
             <p className="font-medium mb-1">Excel or CSV format</p>
-            <p>One column per Core-type schema position, header must match Core name exactly.</p>
-            {schema.filter(p => p.node_type !== 'CONNECT').length > 0 && (
+            <p>The header row must match these column names exactly, in this order:</p>
+            {uploadColumns.length > 0 && (
               <p className="mt-2 font-mono text-xs bg-blue-100 px-2 py-1 rounded">
-                Expected columns: {schema.filter(p => p.node_type !== 'CONNECT').map(p => positionLabel(p)).join(' | ')}
+                {uploadColumns.map(c => c.col_name).join(' | ')}
               </p>
             )}
-            <p className="mt-1.5 text-xs text-blue-600">Duplicate rows are automatically skipped.</p>
+            <p className="mt-1.5 text-xs text-blue-600">Duplicate rows are automatically skipped. Optional extra columns: <span className="font-mono">Created By</span>, <span className="font-mono">Created At</span>.</p>
           </div>
           <div className="bg-white border-2 border-dashed border-slate-300 rounded-xl p-8 text-center">
             <input type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
