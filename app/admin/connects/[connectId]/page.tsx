@@ -112,8 +112,9 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
   // Value display map: value_id → label (for rendering table cells)
   const [valueMap, setValueMap] = useState<Record<string, string>>({})
 
-  // Data tab search
+  // Data tab search + sub-tab (Active vs Inactive)
   const [dataSearch, setDataSearch] = useState('')
+  const [dataSubTab, setDataSubTab] = useState<'active' | 'inactive'>('active')
 
   useEffect(() => { load() }, [connectId])
 
@@ -466,14 +467,19 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
     finally { setSavingAssignment(false) }
   }
 
-  // ── Data tab search filter ────────────────────────────────────────────────
-  // Substring-matches against every visible position value plus the creator
-  // name. Mirrors the same label resolution the table uses (display_value
-  // first, valueMap fallback) so what the user types matches what they see.
+  // ── Data tab status splits + search filter ────────────────────────────────
+  // Items are partitioned into Active/Inactive sub-tabs first, then the search
+  // filter is applied within the selected sub-tab. The search mirrors the same
+  // label resolution the table uses (display_value first, valueMap fallback)
+  // so what the user types matches what they see.
+  const activeItems = useMemo(() => items.filter(i => i.status === 'ACTIVE'), [items])
+  const inactiveItems = useMemo(() => items.filter(i => i.status === 'INACTIVE'), [items])
+  const subTabItems = dataSubTab === 'active' ? activeItems : inactiveItems
+
   const displayedItems = useMemo(() => {
     const q = dataSearch.trim().toLowerCase()
-    if (!q) return items
-    return items.filter(item => {
+    if (!q) return subTabItems
+    return subTabItems.filter(item => {
       const parts: string[] = []
       for (const p of schema) {
         const pos = item.positions.find(ip => ip.position_number === p.position_number)
@@ -486,7 +492,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
       if (item.created_by_name) parts.push(item.created_by_name)
       return parts.join(' ').toLowerCase().includes(q)
     })
-  }, [items, schema, valueMap, dataSearch])
+  }, [subTabItems, schema, valueMap, dataSearch])
 
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -685,7 +691,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                 </div>
               )}
 
-              {(!connect.assigned_stocker_id || connect.assigned_stocker_id === getStoredUser()?.id) && (
+              {(!connect.assigned_stocker_id || connect.assigned_stocker_id === getStoredUser()?.id) && dataSubTab === 'active' && (
                 <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6">
                   <h3 className="text-sm font-semibold text-slate-800 mb-4">
                     {editingRowId ? '✎ Edit row' : 'Add new row'}
@@ -742,21 +748,37 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
 
               {/* Data table */}
               <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+                {/* Active / Inactive sub-tabs */}
+                <div className="flex items-center gap-1 px-3 pt-3 border-b border-slate-100 bg-white">
+                  {(['active', 'inactive'] as const).map(t => {
+                    const count = t === 'active' ? activeItems.length : inactiveItems.length
+                    const isOn = dataSubTab === t
+                    return (
+                      <button
+                        key={t}
+                        onClick={() => setDataSubTab(t)}
+                        className={`px-3 py-1.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${isOn ? 'border-green-600 text-green-700 bg-green-50' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+                      >
+                        {t === 'active' ? 'Active' : 'Inactive'} ({count})
+                      </button>
+                    )
+                  })}
+                </div>
                 <div className="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-3">
                   <p className="text-sm font-medium text-slate-700 flex-shrink-0">
-                    {items.length === 0
-                      ? 'No rows yet'
+                    {subTabItems.length === 0
+                      ? (dataSubTab === 'active' ? 'No active rows yet' : 'No inactive rows')
                       : dataSearch.trim()
-                        ? `Showing ${displayedItems.length} of ${items.length} row${items.length !== 1 ? 's' : ''}`
-                        : `${items.filter(i => i.status === 'ACTIVE').length} active row${items.filter(i => i.status === 'ACTIVE').length !== 1 ? 's' : ''}`}
+                        ? `Showing ${displayedItems.length} of ${subTabItems.length} ${dataSubTab} row${subTabItems.length !== 1 ? 's' : ''}`
+                        : `${subTabItems.length} ${dataSubTab} row${subTabItems.length !== 1 ? 's' : ''}`}
                   </p>
-                  {items.length > 0 && (
+                  {subTabItems.length > 0 && (
                     <div className="ml-auto flex items-center gap-2">
                       <input
                         type="search"
                         value={dataSearch}
                         onChange={e => setDataSearch(e.target.value)}
-                        placeholder="Search rows…"
+                        placeholder={`Search ${dataSubTab} rows…`}
                         className="text-sm px-3 py-1.5 border border-slate-200 rounded-lg w-64 focus:outline-none focus:border-green-500"
                       />
                       {dataSearch && (
@@ -768,8 +790,10 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                     </div>
                   )}
                 </div>
-                {items.length === 0 ? (
-                  <p className="text-center py-10 text-slate-400 text-sm">Add your first row using the form above</p>
+                {subTabItems.length === 0 ? (
+                  <p className="text-center py-10 text-slate-400 text-sm">
+                    {dataSubTab === 'active' ? 'Add your first row using the form above' : 'No rows have been inactivated.'}
+                  </p>
                 ) : displayedItems.length === 0 ? (
                   <p className="text-center py-10 text-slate-400 text-sm">No rows match &ldquo;{dataSearch}&rdquo;</p>
                 ) : (
@@ -790,7 +814,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                       </thead>
                       <tbody className="divide-y divide-slate-50">
                         {displayedItems.map((item, idx) => (
-                          <tr key={item.id} className={`transition-colors hover:bg-slate-50 ${item.status === 'INACTIVE' ? 'opacity-40' : ''}`}>
+                          <tr key={item.id} className="transition-colors hover:bg-slate-50">
                             <td className="px-4 py-3 text-slate-400 text-xs">{idx + 1}</td>
                             {schema.map(p => {
                               const pos = item.positions.find(ip => ip.position_number === p.position_number)

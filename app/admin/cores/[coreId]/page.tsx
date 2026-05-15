@@ -38,6 +38,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
   const [products, setProducts] = useState<{ id: string; name: string }[]>([])
   const [productTags, setProductTags] = useState<{ id: string; core_id: string; product_id: string; entity_type_label: string | null }[]>([])
   const [search, setSearch] = useState('')
+  const [itemsSubTab, setItemsSubTab] = useState<'active' | 'inactive'>('active')
   const [showAddItem, setShowAddItem] = useState(false)
   const [newValue, setNewValue] = useState('')
   const [newMediaUrl, setNewMediaUrl] = useState('')
@@ -363,7 +364,9 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
   }
 
   const activeItems = items.filter(i => i.status === 'ACTIVE')
-  const filtered = items.filter(i =>
+  const inactiveItems = items.filter(i => i.status === 'INACTIVE')
+  const subTabItems = itemsSubTab === 'active' ? activeItems : inactiveItems
+  const filtered = subTabItems.filter(i =>
     i.english_value.toLowerCase().includes(search.toLowerCase())
   )
 
@@ -440,11 +443,27 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
             </div>
           )}
 
+          <div className="flex items-center gap-1 mb-3 border-b border-slate-100">
+            {(['active', 'inactive'] as const).map(t => {
+              const count = t === 'active' ? activeItems.length : inactiveItems.length
+              const isOn = itemsSubTab === t
+              return (
+                <button
+                  key={t}
+                  onClick={() => setItemsSubTab(t)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${isOn ? 'border-green-600 text-green-700 bg-green-50' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+                >
+                  {t === 'active' ? 'Active' : 'Inactive'} ({count})
+                </button>
+              )
+            })}
+          </div>
+
           <div className="flex gap-3 mb-4">
             <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder={isMedia ? 'Search by name…' : 'Search items…'}
+              placeholder={`Search ${itemsSubTab} ${isMedia ? 'images' : 'items'}…`}
               className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-            {canWrite && (
+            {canWrite && itemsSubTab === 'active' && (
               <button onClick={() => { setShowAddItem(true); setError('') }}
                 className="px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium">
                 + {isMedia ? 'Add Image' : 'Add Item'}
@@ -455,11 +474,15 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
           {isMedia ? (
             /* ── Image grid ───────────────────────────────────────────────── */
             filtered.length === 0 ? (
-              <p className="text-center py-10 text-slate-400 text-sm">No images found</p>
+              <p className="text-center py-10 text-slate-400 text-sm">
+                {subTabItems.length === 0
+                  ? (itemsSubTab === 'active' ? 'No active images yet' : 'No images have been inactivated.')
+                  : `No images match "${search}"`}
+              </p>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                 {filtered.map(item => (
-                  <div key={item.id} className={`bg-white border border-slate-200 rounded-xl overflow-hidden group ${item.status === 'INACTIVE' ? 'opacity-50' : ''}`}>
+                  <div key={item.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden group">
                     {editingItemId === item.id ? (
                       /* Edit mode */
                       <div className="p-3 space-y-2">
@@ -518,10 +541,14 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
             /* ── Text list ────────────────────────────────────────────────── */
             <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
               {filtered.length === 0 ? (
-                <p className="text-center py-10 text-slate-400 text-sm">No items found</p>
+                <p className="text-center py-10 text-slate-400 text-sm">
+                  {subTabItems.length === 0
+                    ? (itemsSubTab === 'active' ? 'No active items yet' : 'No items have been inactivated.')
+                    : `No items match "${search}"`}
+                </p>
               ) : (
                 filtered.map((item, idx) => (
-                  <div key={item.id} className={`border-b border-slate-100 last:border-0 ${item.status === 'INACTIVE' ? 'opacity-50' : ''}`}>
+                  <div key={item.id} className="border-b border-slate-100 last:border-0">
                     <div className="flex items-center justify-between px-4 py-3 hover:bg-slate-50">
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         <span className="text-xs text-slate-400 w-6 flex-shrink-0">{idx + 1}</span>
