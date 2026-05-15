@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, use, useCallback, useRef } from 'react'
+import { useState, useEffect, use, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { getStoredUser, hasRole } from '@/lib/auth'
 import { formatDate } from '@/lib/format'
@@ -111,6 +111,9 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
 
   // Value display map: value_id → label (for rendering table cells)
   const [valueMap, setValueMap] = useState<Record<string, string>>({})
+
+  // Data tab search
+  const [dataSearch, setDataSearch] = useState('')
 
   useEffect(() => { load() }, [connectId])
 
@@ -463,6 +466,28 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
     finally { setSavingAssignment(false) }
   }
 
+  // ── Data tab search filter ────────────────────────────────────────────────
+  // Substring-matches against every visible position value plus the creator
+  // name. Mirrors the same label resolution the table uses (display_value
+  // first, valueMap fallback) so what the user types matches what they see.
+  const displayedItems = useMemo(() => {
+    const q = dataSearch.trim().toLowerCase()
+    if (!q) return items
+    return items.filter(item => {
+      const parts: string[] = []
+      for (const p of schema) {
+        const pos = item.positions.find(ip => ip.position_number === p.position_number)
+        if (!pos) continue
+        const valueId = getDataPositionValueId(pos)
+        const displayValue = (pos as { display_value?: string }).display_value
+        const label = displayValue || (valueId ? valueMap[valueId] || '' : '')
+        if (label) parts.push(label)
+      }
+      if (item.created_by_name) parts.push(item.created_by_name)
+      return parts.join(' ').toLowerCase().includes(q)
+    })
+  }, [items, schema, valueMap, dataSearch])
+
   // ─────────────────────────────────────────────────────────────────────────
 
   if (loading) return <div className="flex justify-center py-20"><LoadingSpinner size="lg" /></div>
@@ -717,13 +742,36 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
 
               {/* Data table */}
               <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                <div className="px-5 py-3 border-b border-slate-100 bg-slate-50">
-                  <p className="text-sm font-medium text-slate-700">
-                    {items.length === 0 ? 'No rows yet' : `${items.filter(i => i.status === 'ACTIVE').length} active row${items.filter(i => i.status === 'ACTIVE').length !== 1 ? 's' : ''}`}
+                <div className="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center gap-3">
+                  <p className="text-sm font-medium text-slate-700 flex-shrink-0">
+                    {items.length === 0
+                      ? 'No rows yet'
+                      : dataSearch.trim()
+                        ? `Showing ${displayedItems.length} of ${items.length} row${items.length !== 1 ? 's' : ''}`
+                        : `${items.filter(i => i.status === 'ACTIVE').length} active row${items.filter(i => i.status === 'ACTIVE').length !== 1 ? 's' : ''}`}
                   </p>
+                  {items.length > 0 && (
+                    <div className="ml-auto flex items-center gap-2">
+                      <input
+                        type="search"
+                        value={dataSearch}
+                        onChange={e => setDataSearch(e.target.value)}
+                        placeholder="Search rows…"
+                        className="text-sm px-3 py-1.5 border border-slate-200 rounded-lg w-64 focus:outline-none focus:border-green-500"
+                      />
+                      {dataSearch && (
+                        <button
+                          onClick={() => setDataSearch('')}
+                          className="text-xs text-slate-500 hover:text-slate-800 px-2 py-1"
+                        >Clear</button>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {items.length === 0 ? (
                   <p className="text-center py-10 text-slate-400 text-sm">Add your first row using the form above</p>
+                ) : displayedItems.length === 0 ? (
+                  <p className="text-center py-10 text-slate-400 text-sm">No rows match &ldquo;{dataSearch}&rdquo;</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -741,7 +789,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
-                        {items.map((item, idx) => (
+                        {displayedItems.map((item, idx) => (
                           <tr key={item.id} className={`transition-colors hover:bg-slate-50 ${item.status === 'INACTIVE' ? 'opacity-40' : ''}`}>
                             <td className="px-4 py-3 text-slate-400 text-xs">{idx + 1}</td>
                             {schema.map(p => {
