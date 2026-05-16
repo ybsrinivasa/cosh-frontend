@@ -12,6 +12,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner'
 export default function FoldersPage() {
   const [folders, setFolders] = useState<Folder[]>([])
   const [cores, setCores] = useState<Core[]>([])
+  const [stockerMap, setStockerMap] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [showFolderModal, setShowFolderModal] = useState(false)
   const [showCoreModal, setShowCoreModal] = useState(false)
@@ -28,9 +29,19 @@ export default function FoldersPage() {
 
   async function load() {
     try {
-      const [f, c] = await Promise.all([api.get('/folders'), api.get('/cores')])
+      const canManage = hasRole(getStoredUser(), 'DESIGNER', 'ADMIN')
+      const [f, c, s] = await Promise.all([
+        api.get('/folders'),
+        api.get('/cores'),
+        canManage
+          ? api.get('/admin/users/by-role/STOCKER').catch(() => ({ data: [] }))
+          : Promise.resolve({ data: [] }),
+      ])
       setFolders(f.data)
       setCores(c.data)
+      const map: Record<string, string> = {}
+      for (const u of s.data as { id: string; name: string }[]) map[u.id] = u.name
+      setStockerMap(map)
     } finally {
       setLoading(false)
     }
@@ -146,6 +157,17 @@ export default function FoldersPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        {hasRole(getStoredUser(), 'DESIGNER', 'ADMIN') && (
+                          core.assigned_stocker_id ? (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200" title="Assigned Stocker">
+                              👤 {stockerMap[core.assigned_stocker_id] || 'Assigned'}
+                            </span>
+                          ) : (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200" title="No Stocker assigned">
+                              Unassigned
+                            </span>
+                          )
+                        )}
                         <Badge label={core.core_type} variant={core.core_type} />
                         <Badge label={core.status} variant={core.status} />
                         {core.is_public && <Badge label="Public" variant="active" />}

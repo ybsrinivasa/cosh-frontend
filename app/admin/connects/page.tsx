@@ -11,6 +11,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner'
 
 export default function ConnectsPage() {
   const [connects, setConnects] = useState<Connect[]>([])
+  const [stockerMap, setStockerMap] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState({ name: '', description: '' })
@@ -23,8 +24,17 @@ export default function ConnectsPage() {
 
   async function load() {
     try {
-      const { data } = await api.get('/connects')
-      setConnects(data)
+      const canManage = hasRole(getStoredUser(), 'DESIGNER', 'ADMIN')
+      const [c, s] = await Promise.all([
+        api.get('/connects'),
+        canManage
+          ? api.get('/admin/users/by-role/STOCKER').catch(() => ({ data: [] }))
+          : Promise.resolve({ data: [] }),
+      ])
+      setConnects(c.data)
+      const map: Record<string, string> = {}
+      for (const u of s.data as { id: string; name: string }[]) map[u.id] = u.name
+      setStockerMap(map)
     } finally { setLoading(false) }
   }
 
@@ -91,6 +101,17 @@ export default function ConnectsPage() {
                 </Link>
               )}
               <div className="flex items-center gap-2 flex-shrink-0">
+                {hasRole(getStoredUser(), 'DESIGNER', 'ADMIN') && (
+                  connect.assigned_stocker_id ? (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200" title="Assigned Stocker">
+                      👤 {stockerMap[connect.assigned_stocker_id] || 'Assigned'}
+                    </span>
+                  ) : (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200" title="No Stocker assigned">
+                      Unassigned
+                    </span>
+                  )
+                )}
                 <Badge label={connect.status} variant={connect.status} />
                 {connect.schema_finalised && <Badge label="Schema locked" variant="active" />}
                 {connect.is_public && <Badge label="Public" variant="active" />}
