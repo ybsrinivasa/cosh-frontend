@@ -1,18 +1,24 @@
-FROM node:20-bookworm-slim AS builder
+# Pin to Node 20.15.x — ships with npm 10.7.0, which predates the 10.8.x
+# "Exit handler never called!" regression that silently dropped ~30% of
+# packages from node_modules on cosh prod 2026-05-26. The default
+# node:20-bookworm-slim tracks newer Node minor versions and would pull
+# in npm 10.8.x again. Using a fixed minor also means we don't need to
+# `npm install -g npm@X` at build time, which avoids registry fetches
+# that have been intermittently ECONNREFUSED from the prod host.
+FROM node:20.15-bookworm-slim AS builder
 
 WORKDIR /app
 ENV NODE_OPTIONS=--max-old-space-size=4096
 
-# Pin npm to 10.7.0. The npm shipped with node:20-bookworm-slim (10.8.2) has a
-# regression where parallel package downloads can leave the process in a state
-# it can't exit from — surface symptom is "Exit handler never called!", but
-# critically npm exits 0 with a PARTIAL node_modules. On cosh prod 2026-05-26
-# this dropped ~130 of 440 packages including `next`, then npm run build fell
-# over with "next: not found". 10.7.0 predates that regression.
-RUN npm install -g npm@10.7.0
+# Be patient with the registry — same host had ECONNREFUSED bursts during
+# the 2026-05-26 incident. 5 retries with backoff up to 2min covers most
+# transient blips without making a permanent outage take forever to fail.
+ENV NPM_CONFIG_FETCH_RETRIES=5
+ENV NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=30000
+ENV NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000
 
-# COPY first, install second — guarantees nothing in the build context can
-# shadow the install. We pay a tiny layer-cache cost for build reliability.
+# COPY first, install second — guarantees nothing in the build context
+# can shadow the install.
 COPY . .
 
 RUN npm ci --no-audit --no-fund
@@ -24,14 +30,14 @@ RUN npm run build
 
 # ── Runtime image ────────────────────────────────────────────────────────────
 
-FROM node:20-bookworm-slim AS runner
+FROM node:20.15-bookworm-slim AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NODE_OPTIONS=--max-old-space-size=2048
-
-# Same npm pin reason as above — production install must complete fully.
-RUN npm install -g npm@10.7.0
+ENV NPM_CONFIG_FETCH_RETRIES=5
+ENV NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=30000
+ENV NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000
 
 COPY --from=builder /app/package.json /app/package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
