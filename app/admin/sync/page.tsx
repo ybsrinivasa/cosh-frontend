@@ -30,6 +30,32 @@ export default function SyncPage() {
   const [dispatching, setDispatching] = useState(false)
   const [dispatchResult, setDispatchResult] = useState('')
 
+  // Sync History row expansion — click a row to see product_response and counts
+  type HistoryDetail = {
+    id: string; status: string; sync_mode: string;
+    initiated_at: string; completed_at: string | null;
+    total_items: number | null; items_inserted: number | null;
+    items_updated: number | null; items_failed: number | null;
+    product_response: unknown
+  }
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
+  const [historyDetails, setHistoryDetails] = useState<Record<string, HistoryDetail>>({})
+  const [loadingHistoryId, setLoadingHistoryId] = useState<string | null>(null)
+
+  async function toggleHistoryRow(productId: string, syncId: string) {
+    if (expandedHistoryId === syncId) { setExpandedHistoryId(null); return }
+    setExpandedHistoryId(syncId)
+    if (historyDetails[syncId]) return
+    setLoadingHistoryId(syncId)
+    try {
+      const { data } = await api.get(`/sync/${productId}/history/${syncId}`)
+      setHistoryDetails(prev => ({ ...prev, [syncId]: data }))
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setHistoryDetails(prev => ({ ...prev, [syncId]: { id: syncId, status: 'ERROR', sync_mode: '', initiated_at: '', completed_at: null, total_items: null, items_inserted: null, items_updated: null, items_failed: null, product_response: { error: err.response?.data?.detail || 'Failed to load detail' } } }))
+    } finally { setLoadingHistoryId(null) }
+  }
+
   useEffect(() => {
     if (!isAdmin(getStoredUser())) { setLoading(false); return }
     loadProducts()
@@ -255,16 +281,77 @@ export default function SyncPage() {
               {history.length === 0 ? (
                 <p className="text-center py-4 text-slate-400 text-xs">No syncs yet</p>
               ) : (
-                history.slice(0, 8).map(h => (
-                  <div key={h.id} className="px-4 py-2.5 border-b border-slate-100 last:border-0">
-                    <div className="flex items-center justify-between">
-                      <Badge label={h.status} variant={h.status.toLowerCase()} />
-                      <span className="text-xs text-slate-400">{h.sync_mode}</span>
+                history.slice(0, 8).map(h => {
+                  const isExpanded = expandedHistoryId === h.id
+                  const detail = historyDetails[h.id]
+                  return (
+                    <div key={h.id} className="border-b border-slate-100 last:border-0">
+                      <button
+                        type="button"
+                        onClick={() => toggleHistoryRow(selected, h.id)}
+                        className="w-full text-left px-4 py-2.5 hover:bg-slate-50 transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge label={h.status} variant={h.status.toLowerCase()} />
+                            <span className="text-xs text-slate-300">{isExpanded ? '▾' : '▸'}</span>
+                          </div>
+                          <span className="text-xs text-slate-400">{h.sync_mode}</span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">{new Date(h.initiated_at).toLocaleString()}</p>
+                        {h.total_items && <p className="text-xs text-slate-400">{h.total_items} items</p>}
+                      </button>
+                      {isExpanded && (
+                        <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 text-xs">
+                          {loadingHistoryId === h.id || !detail ? (
+                            <p className="text-slate-400">Loading…</p>
+                          ) : (
+                            <>
+                              <div className="grid grid-cols-2 gap-y-1 mb-2 text-slate-600">
+                                {detail.completed_at && (
+                                  <>
+                                    <span className="text-slate-400">Completed</span>
+                                    <span>{new Date(detail.completed_at).toLocaleString()}</span>
+                                  </>
+                                )}
+                                {detail.total_items != null && (
+                                  <>
+                                    <span className="text-slate-400">Total items</span>
+                                    <span>{detail.total_items}</span>
+                                  </>
+                                )}
+                                {detail.items_inserted != null && (
+                                  <>
+                                    <span className="text-slate-400">Inserted</span>
+                                    <span>{detail.items_inserted}</span>
+                                  </>
+                                )}
+                                {detail.items_updated != null && (
+                                  <>
+                                    <span className="text-slate-400">Updated</span>
+                                    <span>{detail.items_updated}</span>
+                                  </>
+                                )}
+                                {detail.items_failed != null && detail.items_failed > 0 && (
+                                  <>
+                                    <span className="text-slate-400">Failed</span>
+                                    <span className="text-red-600 font-medium">{detail.items_failed}</span>
+                                  </>
+                                )}
+                              </div>
+                              <p className="text-slate-400 font-medium mb-1">Response from RootsTalk</p>
+                              <pre className="bg-white border border-slate-200 rounded p-2 text-[10px] text-slate-700 max-h-80 overflow-auto whitespace-pre-wrap break-all">
+                                {detail.product_response
+                                  ? JSON.stringify(detail.product_response, null, 2)
+                                  : '(no response captured)'}
+                              </pre>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <p className="text-xs text-slate-500 mt-0.5">{new Date(h.initiated_at).toLocaleString()}</p>
-                    {h.total_items && <p className="text-xs text-slate-400">{h.total_items} items</p>}
-                  </div>
-                ))
+                  )
+                })
               )}
             </div>
           </div>
