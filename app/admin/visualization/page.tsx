@@ -255,6 +255,9 @@ export default function VisualizationPage() {
       sprite.backgroundColor = 'rgba(10, 14, 18, 0.7)'
       sprite.padding = 2
       sprite.borderRadius = 3
+      // Don't let edge labels intercept drag/click — keep the underlying
+      // node spheres as the only raycast targets.
+      sprite.raycast = () => {}
       return sprite
     }
   }, [SpriteText])
@@ -268,6 +271,32 @@ export default function VisualizationPage() {
     }
     Object.assign(sprite.position, mid)
   }, [])
+
+  // Always-visible node labels. Earlier we tried this with sprite as
+  // the entire node mesh and it broke drag — the sprite was the
+  // raycast target instead of the sphere. This version uses
+  // nodeThreeObjectExtend so the default sphere stays the click
+  // target, and we set sprite.raycast = noop so the floating label
+  // is invisible to mouse picking.
+  const showNodeLabels = (slice?.nodes.length || 0) <= 80
+  const nodeThreeObject = useMemo(() => {
+    if (!SpriteText || !showNodeLabels) return undefined
+    return (node: any) => {
+      const sprite = new SpriteText(node.label || '')
+      sprite.color = 'rgba(245, 250, 255, 0.95)'
+      sprite.textHeight = node.node_kind === 'hub' ? 4 : 3
+      sprite.fontWeight = node.node_kind === 'hub' ? '700' : '500'
+      sprite.backgroundColor = 'rgba(10, 14, 18, 0.55)'
+      sprite.padding = 1.5
+      sprite.borderRadius = 2
+      // Float the label above the sphere.
+      sprite.position.y = Math.cbrt(node.val) * 1.6 + 3
+      // Critical: prevent the sprite from being a raycast target so it
+      // doesn't intercept drag clicks meant for the underlying sphere.
+      sprite.raycast = () => {}
+      return sprite
+    }
+  }, [SpriteText, showNodeLabels])
 
   // Tune the force-directed layout when a slice loads. Modest
   // repulsion + slightly longer edges spread the nodes out enough
@@ -457,6 +486,8 @@ export default function VisualizationPage() {
           nodeVal={(n: any) => n.val}
           nodeOpacity={0.95}
           nodeResolution={20}
+          nodeThreeObject={nodeThreeObject}
+          nodeThreeObjectExtend={true}
           linkColor={() => 'rgba(160, 200, 240, 0.45)'}
           linkWidth={1.2}
           linkOpacity={0.85}
@@ -476,21 +507,23 @@ export default function VisualizationPage() {
           enableNodeDrag={true}
           enablePointerInteraction={true}
           onNodeClick={handleNodeClick}
-          // Explicit drag handlers: set fx/fy/fz during drag so the node
-          // follows the cursor, and KEEP them set on release so the node
-          // pins where dropped (default lib behaviour varies by version
-          // — explicit is safer). The other nodes' physics-driven
-          // positions rearrange around the pinned one. That's the Bloom
-          // "pull-and-stick" feel.
+          // Drag with live physics + elastic release. While dragging,
+          // pin the node to the cursor AND reheat the simulation so the
+          // rest of the graph visibly rearranges around it. On release,
+          // CLEAR the pin so physics takes the dragged node back to a
+          // natural equilibrium — that's the satisfying "snap back into
+          // shape" Bloom feel.
           onNodeDrag={(node: any) => {
             node.fx = node.x
             node.fy = node.y
             node.fz = node.z
+            try { fgRef.current?.d3ReheatSimulation() } catch {}
           }}
           onNodeDragEnd={(node: any) => {
-            node.fx = node.x
-            node.fy = node.y
-            node.fz = node.z
+            node.fx = undefined
+            node.fy = undefined
+            node.fz = undefined
+            try { fgRef.current?.d3ReheatSimulation() } catch {}
           }}
           warmupTicks={50}
           cooldownTicks={150}
