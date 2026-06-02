@@ -186,9 +186,9 @@ export default function VisualizationPage() {
         name: n.node_kind === 'hub'
           ? `${n.label}  ·  ${n.core_name} (row)`
           : `${n.label}  ·  ${n.core_name}`,
-        // Tuned-down sphere sizes that pair with the collide-force above.
-        // Too big + tight collide = chaotic; this combo settles cleanly.
-        val: n.node_kind === 'hub' ? 18 : (n.group === 'filter1' ? 14 : 8),
+        // Same proportions as the original Phase 3 sizing that the
+        // user said felt right.
+        val: n.node_kind === 'hub' ? 20 : (n.group === 'filter1' ? 10 : 4),
         color: coreColour.get(n.core_id) || '#888',
       })),
       links: slice.edges.map(e => {
@@ -269,38 +269,20 @@ export default function VisualizationPage() {
     Object.assign(sprite.position, mid)
   }, [])
 
-  // When a slice loads, tune the force-directed layout for the
-  // "Bloom-like" spread: strong repulsion + long edges + a collision
-  // force that physically prevents spheres from overlapping. The result
-  // is a constellation you can read at a glance and grab individual
-  // nodes out of.
+  // Tune the force-directed layout when a slice loads. Modest
+  // repulsion + slightly longer edges spread the nodes out enough
+  // to grab individual ones without overwhelming the simulation.
+  // (Earlier iterations cranked these much higher + added a collide
+  // force + auto zoomToFit — and node drag stopped working. Keeping
+  // the defaults light keeps drag responsive.)
   useEffect(() => {
     if (!slice || !fgRef.current) return
     const fg = fgRef.current
-    let cancelled = false
-    ;(async () => {
-      try {
-        // Strong repulsion. -30 (default) keeps Pest Diagnosis's 27
-        // hubs huddled around shared items; -1500 forces a proper
-        // spread.
-        fg.d3Force('charge').strength(-1500)
-        // Longer edge "spring" + weaker pull. Lets shared items still
-        // attract their hubs without dragging them into a clump.
-        fg.d3Force('link').distance(120)
-        fg.d3Force('link').strength(0.25)
-        // Collision force — hard-stops spheres from overlapping. d3-
-        // force-3d is already a transitive dep of react-force-graph-3d.
-        const { forceCollide } = await import('d3-force-3d')
-        if (cancelled) return
-        fg.d3Force('collide', forceCollide(24))
-        // Reheat so new forces apply to already-positioned nodes.
-        fg.d3ReheatSimulation()
-      } catch {}
-    })()
-    const t = setTimeout(() => {
-      try { fg.zoomToFit(1000, 80) } catch {}
-    }, 1500)
-    return () => { cancelled = true; clearTimeout(t) }
+    try {
+      fg.d3Force('charge').strength(-200)
+      fg.d3Force('link').distance(60)
+      fg.d3ReheatSimulation()
+    } catch {}
   }, [slice])
 
   // ── Render ────────────────────────────────────────────────────────────────
