@@ -99,18 +99,49 @@ export default function VisualizationPage() {
   const [error, setError] = useState<string | null>(null)
   const [focusedNode, setFocusedNode] = useState<VizNode | null>(null)
 
-  // Lazy import of SpriteText (three-spritetext is a CommonJS module that
-  // also reaches for window during import). Loaded once on mount and stashed.
+  // Lazy import three-spritetext + the UnrealBloomPass post-process. Both
+  // touch window at module load — Next.js SSR would crash without dynamic.
   const [SpriteText, setSpriteText] = useState<any>(null)
+  const [BloomPass, setBloomPass] = useState<any>(null)
+  const [ThreeVector2, setThreeVector2] = useState<any>(null)
   useEffect(() => {
     let cancelled = false
-    import('three-spritetext').then(mod => {
-      if (!cancelled) setSpriteText(() => mod.default)
+    Promise.all([
+      import('three-spritetext'),
+      import('three/examples/jsm/postprocessing/UnrealBloomPass.js'),
+      import('three'),
+    ]).then(([sprite, bloom, three]) => {
+      if (cancelled) return
+      setSpriteText(() => sprite.default)
+      setBloomPass(() => bloom.UnrealBloomPass)
+      setThreeVector2(() => three.Vector2)
     })
     return () => { cancelled = true }
   }, [])
 
   const fgRef = useRef<any>(null)
+  const bloomInstalledRef = useRef(false)
+
+  // Install the bloom post-process pass once the canvas mounts. Has to
+  // wait for the engine ref AND the lazy-loaded bloom module.
+  useEffect(() => {
+    if (bloomInstalledRef.current) return
+    if (!slice || !fgRef.current || !BloomPass || !ThreeVector2) return
+    try {
+      const composer = fgRef.current.postProcessingComposer()
+      const pass = new BloomPass(
+        new ThreeVector2(window.innerWidth, window.innerHeight),
+        1.6,   // strength — drama dial
+        0.6,   // radius
+        0.25,  // threshold — only luminous bits bloom
+      )
+      composer.addPass(pass)
+      bloomInstalledRef.current = true
+    } catch {
+      // composer may not be ready on the first render — retried on
+      // subsequent renders by re-entering this effect.
+    }
+  }, [slice, BloomPass, ThreeVector2])
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -175,6 +206,7 @@ export default function VisualizationPage() {
   const graphData = useMemo(() => {
     if (!slice) return { nodes: [], links: [] }
     const coreColour = colourMap(slice.nodes.map(n => n.core_id))
+    const nodeById = new Map(slice.nodes.map(n => [n.id, n]))
     return {
       nodes: slice.nodes.map(n => ({
         ...n,
@@ -182,20 +214,31 @@ export default function VisualizationPage() {
         name: n.node_kind === 'hub'
           ? `${n.label}  ·  ${n.core_name} (row)`
           : `${n.label}  ·  ${n.core_name}`,
-        val: n.node_kind === 'hub' ? 20 : (n.group === 'filter1' ? 10 : 4),
+        val: n.node_kind === 'hub' ? 24 : (n.group === 'filter1' ? 14 : 8),
         color: coreColour.get(n.core_id) || '#888',
       })),
-      links: slice.edges.map(e => ({
-        source: e.source,
-        target: e.target,
-        rel_type: e.rel_type,
-        connect_name: e.connect_name,
-        // Pretty label: prefer the Connect name when relation type is the
-        // generic IN_ROW (hub-and-spoke); otherwise show the rel type.
-        label: e.rel_type === 'IN_ROW'
-          ? (e.connect_name || 'row')
-          : e.rel_type,
-      })),
+      links: slice.edges.map(e => {
+        const target = nodeById.get(e.target)
+        const source = nodeById.get(e.source)
+        // Smarter labels:
+        //   - IN_ROW (Connect mode spoke): label with the target's Core
+        //     name. Repeating the Connect name on every spoke is noise;
+        //     the Core name ("Symptom", "Specific Names") tells you
+        //     which slot of the row that spoke fills.
+        //   - Otherwise: show the relationship type (IS_A, AFFECTS, …).
+        let label = e.rel_type
+        if (e.rel_type === 'IN_ROW') {
+          const itemSide = target?.node_kind === 'item' ? target : source
+          label = itemSide?.core_name || e.connect_name || ''
+        }
+        return {
+          source: e.source,
+          target: e.target,
+          rel_type: e.rel_type,
+          connect_name: e.connect_name,
+          label,
+        }
+      }),
     }
   }, [slice])
 
@@ -232,10 +275,11 @@ export default function VisualizationPage() {
     if (!SpriteText) return undefined
     return (link: any) => {
       const sprite = new SpriteText(link.label || '')
-      sprite.color = 'rgba(220, 230, 245, 0.85)'
-      sprite.textHeight = 1.6
-      sprite.backgroundColor = 'rgba(10, 14, 18, 0.6)'
-      sprite.padding = 1.5
+      sprite.color = 'rgba(230, 240, 255, 0.92)'
+      sprite.textHeight = 3.2
+      sprite.fontWeight = '600'
+      sprite.backgroundColor = 'rgba(10, 14, 18, 0.7)'
+      sprite.padding = 2
       sprite.borderRadius = 3
       return sprite
     }
@@ -250,6 +294,28 @@ export default function VisualizationPage() {
     }
     Object.assign(sprite.position, mid)
   }, [])
+
+  // Always-visible node labels. We render the node as a coloured sphere
+  // (default geometry) PLUS a SpriteText label floating just above it.
+  // For huge graphs (>120 nodes) we drop labels to keep the canvas clean
+  // — hover still shows the tooltip.
+  const showNodeLabels = (slice?.nodes.length || 0) <= 120
+  const nodeThreeObject = useMemo(() => {
+    if (!SpriteText || !showNodeLabels) return undefined
+    return (node: any) => {
+      const sprite = new SpriteText(node.label || '')
+      sprite.color = 'rgba(255, 255, 255, 0.97)'
+      sprite.textHeight = node.node_kind === 'hub' ? 5 : 3.5
+      sprite.fontWeight = node.node_kind === 'hub' ? '700' : '500'
+      sprite.backgroundColor = 'rgba(10, 14, 18, 0.55)'
+      sprite.padding = 2
+      sprite.borderRadius = 3
+      // Position the label above the node sphere — `nodeThreeObjectExtend`
+      // tells the engine to render this in addition to the default sphere.
+      sprite.position.y = Math.cbrt(node.val) * 1.6 + 3
+      return sprite
+    }
+  }, [SpriteText, showNodeLabels])
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -421,14 +487,23 @@ export default function VisualizationPage() {
           nodeLabel="name"
           nodeColor={(n: any) => n.color}
           nodeVal={(n: any) => n.val}
-          nodeOpacity={0.95}
-          linkColor={() => 'rgba(180, 200, 220, 0.35)'}
-          linkWidth={0.8}
-          linkOpacity={0.7}
+          nodeOpacity={1}
+          nodeResolution={20}
+          nodeThreeObject={nodeThreeObject}
+          nodeThreeObjectExtend={true}
+          linkColor={() => 'rgba(160, 200, 240, 0.45)'}
+          linkWidth={1.2}
+          linkOpacity={0.85}
           linkLabel={(l: any) => l.label || ''}
           linkThreeObject={linkThreeObject}
           linkThreeObjectExtend={true}
           linkPositionUpdate={linkPositionUpdate}
+          // Edge particles — small dots flowing along each edge. This is
+          // where the "data feels alive" effect comes from.
+          linkDirectionalParticles={2}
+          linkDirectionalParticleSpeed={0.006}
+          linkDirectionalParticleWidth={2.5}
+          linkDirectionalParticleColor={() => 'rgba(160, 240, 200, 0.9)'}
           enableNodeDrag={true}
           onNodeClick={handleNodeClick}
           warmupTicks={50}
