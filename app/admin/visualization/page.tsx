@@ -284,6 +284,13 @@ export default function VisualizationPage() {
   // (Earlier iterations cranked these much higher + added a collide
   // force + auto zoomToFit — and node drag stopped working. Keeping
   // the defaults light keeps drag responsive.)
+  //
+  // Then call fg.refresh() on the next tick to force a full object
+  // rebuild. Without this, DragControls is initialised BEFORE every
+  // node has its __threeObj sphere assigned, so the controls bind to
+  // a partial (or empty) list and drag silently doesn't work on the
+  // FIRST Visualise click. After refresh(), the lib re-runs its update
+  // pipeline with all meshes in place and DragControls rebinds correctly.
   useEffect(() => {
     if (!slice || !fgRef.current) return
     const fg = fgRef.current
@@ -292,6 +299,10 @@ export default function VisualizationPage() {
       fg.d3Force('link').distance(60)
       fg.d3ReheatSimulation()
     } catch {}
+    const t = setTimeout(() => {
+      try { fg.refresh() } catch {}
+    }, 100)
+    return () => clearTimeout(t)
   }, [slice])
 
   // ── Render ────────────────────────────────────────────────────────────────
