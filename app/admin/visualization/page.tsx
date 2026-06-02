@@ -485,18 +485,20 @@ export default function VisualizationPage() {
           enableNodeDrag={true}
           enablePointerInteraction={true}
           onNodeClick={handleNodeClick}
-          // Drag with live physics + elastic release. While dragging,
-          // pin the node to the cursor AND reheat the simulation so the
-          // rest of the graph visibly rearranges around it. On release,
-          // CLEAR the pin so physics takes the dragged node back to a
-          // natural equilibrium — that's the satisfying "snap back into
-          // shape" Bloom feel.
-          onNodeDrag={(node: any) => {
-            node.fx = node.x
-            node.fy = node.y
-            node.fz = node.z
+          // Drag with live physics + elastic release.
+          // IMPORTANT: do NOT touch node.fx/fy/fz inside `onNodeDrag`.
+          // react-force-graph-3d sets them to the cursor-projected
+          // position BEFORE calling this callback. If we re-assign them
+          // from node.x/y/z we'd be writing the previous tick's stale
+          // position back — which effectively cancels the drag (only
+          // the camera rotates, the node doesn't move). The library is
+          // already pinning correctly during drag; we only reheat the
+          // simulation so neighbours visibly rearrange.
+          onNodeDrag={() => {
             try { fgRef.current?.d3ReheatSimulation() } catch {}
           }}
+          // On release, CLEAR the pin so physics takes the dragged node
+          // back into the cluster (the elastic Bloom feel).
           onNodeDragEnd={(node: any) => {
             node.fx = undefined
             node.fy = undefined
