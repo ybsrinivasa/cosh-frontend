@@ -13,7 +13,8 @@ const reviewerNav = [
   { href: '/admin/similarity', label: 'Similarity Review', icon: '🔍' },
 ]
 const designerNav = [
-  { href: '/admin/migration', label: 'Migration Status', icon: '📊' },
+  { href: '/admin/migration',     label: 'Migration Status', icon: '📊' },
+  { href: '/admin/visualization', label: 'Visualization',    icon: '🌐' },
 ]
 const adminOnlyNav = [
   { href: '/admin/sync', label: 'Sync', icon: '🔄' },

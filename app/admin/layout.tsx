@@ -1,12 +1,13 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { getToken } from '@/lib/auth'
 import Sidebar from '@/components/layout/Sidebar'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
+  const pathname = usePathname()
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
@@ -25,13 +26,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     )
   }
 
+  // The visualization canvas needs the full viewport — skip the centred
+  // max-w wrapper for it. All other admin pages keep the standard layout.
+  const isFullBleed = pathname.startsWith('/admin/visualization')
+
   return (
     <div className="flex h-screen overflow-hidden bg-stone-50">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
-        <div className="max-w-6xl mx-auto px-6 py-8">
-          {children}
-        </div>
+        {isFullBleed ? (
+          children
+        ) : (
+          <div className="max-w-6xl mx-auto px-6 py-8">{children}</div>
+        )}
       </main>
     </div>
   )
