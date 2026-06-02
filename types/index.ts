@@ -89,6 +89,8 @@ export interface CoreDataItem {
   created_by_name: string | null
   s3_url: string | null
   created_at: string
+  updated_at: string | null
+  updated_by_name: string | null
   translations: Translation[]
 }
 
@@ -142,6 +144,8 @@ export interface ConnectDataItem {
   status: Status
   created_by_name: string | null
   created_at: string
+  updated_at: string | null
+  updated_by_name: string | null
   positions: ConnectDataPosition[]
 }
 

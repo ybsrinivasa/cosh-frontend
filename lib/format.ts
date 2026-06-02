@@ -20,3 +20,14 @@ export function formatDate(iso: string): string {
     hour: '2-digit', minute: '2-digit',
   })
 }
+
+/**
+ * Whether a row has been edited since creation. `updated_at` is set to
+ * `created_at` on insert, but the two timestamps can differ by a few
+ * microseconds because SQLAlchemy's `default` and `onupdate` fire
+ * separately, so we use a 2-second floor.
+ */
+export function wasEdited(createdAt: string | null | undefined, updatedAt: string | null | undefined): boolean {
+  if (!createdAt || !updatedAt) return false
+  return new Date(updatedAt).getTime() - new Date(createdAt).getTime() > 2000
+}

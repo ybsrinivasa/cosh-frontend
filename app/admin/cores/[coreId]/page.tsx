@@ -3,7 +3,7 @@ import { useState, useEffect, use, useCallback } from 'react'
 import api from '@/lib/api'
 import type { Core, CoreDataItem, CoreLanguageConfig, Language } from '@/types'
 import { getStoredUser, hasRole } from '@/lib/auth'
-import { formatDate } from '@/lib/format'
+import { formatDate, wasEdited } from '@/lib/format'
 
 interface StockerUser { id: string; name: string; email: string }
 import PageHeader from '@/components/ui/PageHeader'
@@ -518,6 +518,11 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                         <div className="p-2">
                           <p className="text-xs text-slate-700 font-medium truncate" title={item.english_value}>{item.english_value}</p>
                           <p className="text-xs text-slate-400 mt-0.5">{item.created_by_name || ''}</p>
+                          {wasEdited(item.created_at, item.updated_at) && (
+                            <p className="text-[10px] text-slate-400 mt-0.5 italic" title={item.updated_at ? new Date(item.updated_at).toLocaleString('en-IN') : ''}>
+                              Updated {item.updated_by_name ? `by ${item.updated_by_name} ` : ''}· {formatDate(item.updated_at!)}
+                            </p>
+                          )}
                           <div className="flex items-center gap-1.5 mt-2">
                             {canWrite && item.status === 'ACTIVE' && (
                               <button onClick={() => { setEditingItemId(item.id); setEditingItemValue(item.english_value); setEditingItemUrl(item.s3_url || '') }}
@@ -560,9 +565,14 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                         ) : (
                           <div className="min-w-0">
                             <span className="text-sm text-slate-800 truncate block">{item.english_value}</span>
-                            <span className="text-xs text-slate-400">
+                            <span className="text-xs text-slate-400 block">
                               {item.created_by_name ? `${item.created_by_name} · ` : ''}{formatDate(item.created_at)}
                             </span>
+                            {wasEdited(item.created_at, item.updated_at) && (
+                              <span className="text-xs text-slate-400 italic block" title={item.updated_at ? new Date(item.updated_at).toLocaleString('en-IN') : ''}>
+                                Updated {item.updated_by_name ? `by ${item.updated_by_name} ` : ''}· {formatDate(item.updated_at!)}
+                              </span>
+                            )}
                           </div>
                         )}
                         {item.legacy_item_id && (

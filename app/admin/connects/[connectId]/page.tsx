@@ -2,7 +2,7 @@
 import { useState, useEffect, use, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { getStoredUser, hasRole } from '@/lib/auth'
-import { formatDate } from '@/lib/format'
+import { formatDate, wasEdited } from '@/lib/format'
 import api from '@/lib/api'
 import type { Connect, SchemaPosition, ConnectDataItem, Core, RelationshipType } from '@/types'
 import PageHeader from '@/components/ui/PageHeader'
@@ -490,6 +490,7 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
         if (label) parts.push(label)
       }
       if (item.created_by_name) parts.push(item.created_by_name)
+      if (item.updated_by_name) parts.push(item.updated_by_name)
       return parts.join(' ').toLowerCase().includes(q)
     })
   }, [subTabItems, schema, valueMap, dataSearch])
@@ -838,6 +839,11 @@ export default function ConnectDetailPage({ params }: { params: Promise<{ connec
                             <td className="px-4 py-3">
                               <p className="text-sm text-slate-700">{item.created_by_name || '—'}</p>
                               <p className="text-xs text-slate-400">{formatDate(item.created_at)}</p>
+                              {wasEdited(item.created_at, item.updated_at) && (
+                                <p className="text-xs text-slate-400 italic mt-1" title={item.updated_at ? new Date(item.updated_at).toLocaleString('en-IN') : ''}>
+                                  Updated {item.updated_by_name ? `by ${item.updated_by_name}` : ''} · {formatDate(item.updated_at!)}
+                                </p>
+                              )}
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2">
