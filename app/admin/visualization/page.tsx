@@ -99,49 +99,21 @@ export default function VisualizationPage() {
   const [error, setError] = useState<string | null>(null)
   const [focusedNode, setFocusedNode] = useState<VizNode | null>(null)
 
-  // Lazy import three-spritetext + the UnrealBloomPass post-process. Both
-  // touch window at module load — Next.js SSR would crash without dynamic.
+  // Lazy import three-spritetext — used for in-canvas edge labels only.
+  // (Bloom + sprite-on-node were tried in a previous iteration and made
+  // nodes feel smaller because labels expanded the camera's bounding box
+  // and the label meshes intercepted node-drag clicks. Particles and the
+  // smarter Connect-mode edge labels are the keepers from Phase 4.)
   const [SpriteText, setSpriteText] = useState<any>(null)
-  const [BloomPass, setBloomPass] = useState<any>(null)
-  const [ThreeVector2, setThreeVector2] = useState<any>(null)
   useEffect(() => {
     let cancelled = false
-    Promise.all([
-      import('three-spritetext'),
-      import('three/examples/jsm/postprocessing/UnrealBloomPass.js'),
-      import('three'),
-    ]).then(([sprite, bloom, three]) => {
-      if (cancelled) return
-      setSpriteText(() => sprite.default)
-      setBloomPass(() => bloom.UnrealBloomPass)
-      setThreeVector2(() => three.Vector2)
+    import('three-spritetext').then(mod => {
+      if (!cancelled) setSpriteText(() => mod.default)
     })
     return () => { cancelled = true }
   }, [])
 
   const fgRef = useRef<any>(null)
-  const bloomInstalledRef = useRef(false)
-
-  // Install the bloom post-process pass once the canvas mounts. Has to
-  // wait for the engine ref AND the lazy-loaded bloom module.
-  useEffect(() => {
-    if (bloomInstalledRef.current) return
-    if (!slice || !fgRef.current || !BloomPass || !ThreeVector2) return
-    try {
-      const composer = fgRef.current.postProcessingComposer()
-      const pass = new BloomPass(
-        new ThreeVector2(window.innerWidth, window.innerHeight),
-        1.6,   // strength — drama dial
-        0.6,   // radius
-        0.25,  // threshold — only luminous bits bloom
-      )
-      composer.addPass(pass)
-      bloomInstalledRef.current = true
-    } catch {
-      // composer may not be ready on the first render — retried on
-      // subsequent renders by re-entering this effect.
-    }
-  }, [slice, BloomPass, ThreeVector2])
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -214,7 +186,7 @@ export default function VisualizationPage() {
         name: n.node_kind === 'hub'
           ? `${n.label}  ·  ${n.core_name} (row)`
           : `${n.label}  ·  ${n.core_name}`,
-        val: n.node_kind === 'hub' ? 24 : (n.group === 'filter1' ? 14 : 8),
+        val: n.node_kind === 'hub' ? 30 : (n.group === 'filter1' ? 18 : 10),
         color: coreColour.get(n.core_id) || '#888',
       })),
       links: slice.edges.map(e => {
@@ -295,27 +267,18 @@ export default function VisualizationPage() {
     Object.assign(sprite.position, mid)
   }, [])
 
-  // Always-visible node labels. We render the node as a coloured sphere
-  // (default geometry) PLUS a SpriteText label floating just above it.
-  // For huge graphs (>120 nodes) we drop labels to keep the canvas clean
-  // — hover still shows the tooltip.
-  const showNodeLabels = (slice?.nodes.length || 0) <= 120
-  const nodeThreeObject = useMemo(() => {
-    if (!SpriteText || !showNodeLabels) return undefined
-    return (node: any) => {
-      const sprite = new SpriteText(node.label || '')
-      sprite.color = 'rgba(255, 255, 255, 0.97)'
-      sprite.textHeight = node.node_kind === 'hub' ? 5 : 3.5
-      sprite.fontWeight = node.node_kind === 'hub' ? '700' : '500'
-      sprite.backgroundColor = 'rgba(10, 14, 18, 0.55)'
-      sprite.padding = 2
-      sprite.borderRadius = 3
-      // Position the label above the node sphere — `nodeThreeObjectExtend`
-      // tells the engine to render this in addition to the default sphere.
-      sprite.position.y = Math.cbrt(node.val) * 1.6 + 3
-      return sprite
-    }
-  }, [SpriteText, showNodeLabels])
+  // After a slice loads (and the physics has had a moment to settle),
+  // auto-zoom the camera so the cluster fills the canvas. Without this,
+  // the default auto-fit places the camera so far back that small slices
+  // appear as a dot in the corner. 800ms delay gives the force layout
+  // time to spread out; 50px padding keeps the cluster off the edges.
+  useEffect(() => {
+    if (!slice || !fgRef.current) return
+    const t = setTimeout(() => {
+      try { fgRef.current.zoomToFit(800, 60) } catch {}
+    }, 800)
+    return () => clearTimeout(t)
+  }, [slice])
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -487,19 +450,20 @@ export default function VisualizationPage() {
           nodeLabel="name"
           nodeColor={(n: any) => n.color}
           nodeVal={(n: any) => n.val}
-          nodeOpacity={1}
+          nodeOpacity={0.95}
           nodeResolution={20}
-          nodeThreeObject={nodeThreeObject}
-          nodeThreeObjectExtend={true}
           linkColor={() => 'rgba(160, 200, 240, 0.45)'}
           linkWidth={1.2}
           linkOpacity={0.85}
           linkLabel={(l: any) => l.label || ''}
+          // In-canvas edge labels via SpriteText. We keep these even
+          // after rolling back node-label sprites because edges between
+          // identically-shaped nodes are otherwise indistinguishable.
           linkThreeObject={linkThreeObject}
           linkThreeObjectExtend={true}
           linkPositionUpdate={linkPositionUpdate}
-          // Edge particles — small dots flowing along each edge. This is
-          // where the "data feels alive" effect comes from.
+          // Edge particles — small dots flowing along each edge for the
+          // "data feels alive" effect. Doesn't interfere with node drag.
           linkDirectionalParticles={2}
           linkDirectionalParticleSpeed={0.006}
           linkDirectionalParticleWidth={2.5}
