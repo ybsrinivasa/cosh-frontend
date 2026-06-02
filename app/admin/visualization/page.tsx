@@ -485,25 +485,16 @@ export default function VisualizationPage() {
           enableNodeDrag={true}
           enablePointerInteraction={true}
           onNodeClick={handleNodeClick}
-          // Canonical react-force-graph-3d drag pattern: pin the node
-          // where dropped so the user can sculpt the graph. Earlier
-          // experiments with d3ReheatSimulation() in onNodeDrag and
-          // clearing fx/fy/fz in onNodeDragEnd (elastic release) broke
-          // drag entirely — the simulation reheat seems to disturb
-          // DragControls' state mid-drag. Keeping this minimal.
-          //
-          // TEMP: console.logs so we can confirm in the browser devtools
-          // whether the handlers fire on mousedown over a node.
+          // Canonical react-force-graph-3d drag: pin the node where
+          // dropped. Do NOT call d3ReheatSimulation() inside onNodeDrag
+          // — it disturbs DragControls' internal state mid-drag and
+          // breaks drag entirely. The lib already calls d3AlphaTarget
+          // on each drag tick, which is enough to keep neighbours
+          // rearranging while you pull a node.
           onNodeDragEnd={(node: any) => {
-            // eslint-disable-next-line no-console
-            console.log('[viz] onNodeDragEnd', node.id, node.label)
             node.fx = node.x
             node.fy = node.y
             node.fz = node.z
-          }}
-          onNodeDrag={(node: any) => {
-            // eslint-disable-next-line no-console
-            console.log('[viz] onNodeDrag', node.id)
           }}
           warmupTicks={50}
           cooldownTicks={Infinity}
