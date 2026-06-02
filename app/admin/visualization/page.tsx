@@ -492,7 +492,24 @@ export default function VisualizationPage() {
           linkDirectionalParticleWidth={2.5}
           linkDirectionalParticleColor={() => 'rgba(160, 240, 200, 0.9)'}
           enableNodeDrag={true}
+          enablePointerInteraction={true}
           onNodeClick={handleNodeClick}
+          // Explicit drag handlers: set fx/fy/fz during drag so the node
+          // follows the cursor, and KEEP them set on release so the node
+          // pins where dropped (default lib behaviour varies by version
+          // — explicit is safer). The other nodes' physics-driven
+          // positions rearrange around the pinned one. That's the Bloom
+          // "pull-and-stick" feel.
+          onNodeDrag={(node: any) => {
+            node.fx = node.x
+            node.fy = node.y
+            node.fz = node.z
+          }}
+          onNodeDragEnd={(node: any) => {
+            node.fx = node.x
+            node.fy = node.y
+            node.fz = node.z
+          }}
           warmupTicks={50}
           cooldownTicks={150}
         />
