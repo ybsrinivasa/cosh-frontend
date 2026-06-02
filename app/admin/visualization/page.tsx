@@ -485,28 +485,28 @@ export default function VisualizationPage() {
           enableNodeDrag={true}
           enablePointerInteraction={true}
           onNodeClick={handleNodeClick}
-          // Drag with live physics + elastic release.
-          // IMPORTANT: do NOT touch node.fx/fy/fz inside `onNodeDrag`.
-          // react-force-graph-3d sets them to the cursor-projected
-          // position BEFORE calling this callback. If we re-assign them
-          // from node.x/y/z we'd be writing the previous tick's stale
-          // position back — which effectively cancels the drag (only
-          // the camera rotates, the node doesn't move). The library is
-          // already pinning correctly during drag; we only reheat the
-          // simulation so neighbours visibly rearrange.
-          onNodeDrag={() => {
-            try { fgRef.current?.d3ReheatSimulation() } catch {}
-          }}
-          // On release, CLEAR the pin so physics takes the dragged node
-          // back into the cluster (the elastic Bloom feel).
+          // Canonical react-force-graph-3d drag pattern: pin the node
+          // where dropped so the user can sculpt the graph. Earlier
+          // experiments with d3ReheatSimulation() in onNodeDrag and
+          // clearing fx/fy/fz in onNodeDragEnd (elastic release) broke
+          // drag entirely — the simulation reheat seems to disturb
+          // DragControls' state mid-drag. Keeping this minimal.
+          //
+          // TEMP: console.logs so we can confirm in the browser devtools
+          // whether the handlers fire on mousedown over a node.
           onNodeDragEnd={(node: any) => {
-            node.fx = undefined
-            node.fy = undefined
-            node.fz = undefined
-            try { fgRef.current?.d3ReheatSimulation() } catch {}
+            // eslint-disable-next-line no-console
+            console.log('[viz] onNodeDragEnd', node.id, node.label)
+            node.fx = node.x
+            node.fy = node.y
+            node.fz = node.z
+          }}
+          onNodeDrag={(node: any) => {
+            // eslint-disable-next-line no-console
+            console.log('[viz] onNodeDrag', node.id)
           }}
           warmupTicks={50}
-          cooldownTicks={150}
+          cooldownTicks={Infinity}
         />
       ) : (
         <div className="absolute inset-0 flex items-center justify-center text-white/40 text-sm pointer-events-none">
