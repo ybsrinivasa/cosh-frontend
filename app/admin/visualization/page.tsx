@@ -186,8 +186,9 @@ export default function VisualizationPage() {
         name: n.node_kind === 'hub'
           ? `${n.label}  ·  ${n.core_name} (row)`
           : `${n.label}  ·  ${n.core_name}`,
-        // Bigger spheres than before — easier to click-drag and read.
-        val: n.node_kind === 'hub' ? 60 : (n.group === 'filter1' ? 32 : 18),
+        // Tuned-down sphere sizes that pair with the collide-force above.
+        // Too big + tight collide = chaotic; this combo settles cleanly.
+        val: n.node_kind === 'hub' ? 18 : (n.group === 'filter1' ? 14 : 8),
         color: coreColour.get(n.core_id) || '#888',
       })),
       links: slice.edges.map(e => {
@@ -269,28 +270,37 @@ export default function VisualizationPage() {
   }, [])
 
   // When a slice loads, tune the force-directed layout for the
-  // "Bloom-like" spread: strong repulsion + long edges → nodes fly
-  // apart, settle into a readable shape, and individual nodes are
-  // easy to grab and drag. Then zoom to fit once the layout settles.
+  // "Bloom-like" spread: strong repulsion + long edges + a collision
+  // force that physically prevents spheres from overlapping. The result
+  // is a constellation you can read at a glance and grab individual
+  // nodes out of.
   useEffect(() => {
     if (!slice || !fgRef.current) return
     const fg = fgRef.current
-    try {
-      // Negative charge = repulsion. Default is -30 which is way too
-      // gentle for our typical slice sizes (40–500 nodes); they end
-      // up huddled. -300 spreads them out without flinging them off-
-      // screen.
-      fg.d3Force('charge').strength(-300)
-      // Edge "spring" rest length. Default ~30; 70 gives nodes room.
-      fg.d3Force('link').distance(70)
-      // Reheat so the new forces take effect on already-positioned
-      // nodes instead of waiting for the next data change.
-      fg.d3ReheatSimulation()
-    } catch {}
+    let cancelled = false
+    ;(async () => {
+      try {
+        // Strong repulsion. -30 (default) keeps Pest Diagnosis's 27
+        // hubs huddled around shared items; -1500 forces a proper
+        // spread.
+        fg.d3Force('charge').strength(-1500)
+        // Longer edge "spring" + weaker pull. Lets shared items still
+        // attract their hubs without dragging them into a clump.
+        fg.d3Force('link').distance(120)
+        fg.d3Force('link').strength(0.25)
+        // Collision force — hard-stops spheres from overlapping. d3-
+        // force-3d is already a transitive dep of react-force-graph-3d.
+        const { forceCollide } = await import('d3-force-3d')
+        if (cancelled) return
+        fg.d3Force('collide', forceCollide(24))
+        // Reheat so new forces apply to already-positioned nodes.
+        fg.d3ReheatSimulation()
+      } catch {}
+    })()
     const t = setTimeout(() => {
       try { fg.zoomToFit(1000, 80) } catch {}
-    }, 1200)
-    return () => clearTimeout(t)
+    }, 1500)
+    return () => { cancelled = true; clearTimeout(t) }
   }, [slice])
 
   // ── Render ────────────────────────────────────────────────────────────────
