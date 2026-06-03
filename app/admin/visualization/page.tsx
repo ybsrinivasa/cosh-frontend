@@ -305,6 +305,78 @@ export default function VisualizationPage() {
     return () => clearTimeout(t)
   }, [slice])
 
+  // ── Always-visible HTML-overlay node labels ──────────────────────────────
+  // Sprite-based labels (three.js SpriteText set via nodeThreeObject) break
+  // DragControls in react-force-graph-3d 1.29 — so labels live in a sibling
+  // DOM layer that's positioned per-frame using the lib's screen projector.
+  // pointer-events:none keeps drag/click reaching the canvas underneath.
+  const labelLayerRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!slice || !fgRef.current || !labelLayerRef.current) return
+    const fg = fgRef.current
+    const layer = labelLayerRef.current
+    layer.innerHTML = ''
+
+    type LabelEntry = { node: any; el: HTMLDivElement }
+    const entries: LabelEntry[] = []
+    for (const n of (slice.nodes as VizNode[])) {
+      // Hub nodes show the Connect name; ordinary items show their label.
+      // Skip empty labels defensively.
+      const text = (n.node_kind === 'hub' ? n.core_name : n.label) || ''
+      if (!text) continue
+      const el = document.createElement('div')
+      el.textContent = text.length > 28 ? text.slice(0, 27) + '…' : text
+      el.title = text
+      el.className =
+        'absolute select-none pointer-events-none px-1.5 py-0.5 rounded ' +
+        'text-[10px] font-medium tracking-wide leading-none ' +
+        (n.node_kind === 'hub'
+          ? 'bg-amber-900/50 text-amber-100 border border-amber-500/30'
+          : 'bg-black/55 text-white/90 border border-white/10')
+      el.style.transform = 'translate(-50%, -50%)'
+      el.style.whiteSpace = 'nowrap'
+      el.style.willChange = 'transform, left, top'
+      el.style.left = '-9999px'
+      el.style.top = '-9999px'
+      layer.appendChild(el)
+      entries.push({ node: n, el })
+    }
+
+    // Position labels on every animation frame. Reading positions off the
+    // node objects (`n.x/y/z` populated by the simulation each tick) and
+    // projecting via the lib's helper means we follow drag, rotation,
+    // zoom, and re-heat without any extra wiring.
+    let raf = 0
+    let cancelled = false
+    const tick = () => {
+      if (cancelled) return
+      for (const { node, el } of entries) {
+        const x = node.x, y = node.y, z = node.z
+        if (x == null || y == null) { el.style.opacity = '0'; raf = requestAnimationFrame(tick); continue }
+        try {
+          const p = fg.graph2ScreenCoords(x, y, z ?? 0)
+          if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) {
+            el.style.opacity = '0'
+          } else {
+            el.style.opacity = '1'
+            el.style.left = `${p.x}px`
+            el.style.top = `${p.y}px`
+          }
+        } catch {
+          el.style.opacity = '0'
+        }
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(raf)
+      layer.innerHTML = ''
+    }
+  }, [slice])
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="relative h-screen w-full overflow-hidden bg-[#05080a]">
@@ -464,6 +536,16 @@ export default function VisualizationPage() {
             </button>
           )}
         </div>
+      )}
+
+      {/* HTML label overlay — must sit above the canvas but be transparent
+          to pointer events so drag/rotate go through to the WebGL layer. */}
+      {slice && (
+        <div
+          ref={labelLayerRef}
+          className="absolute inset-0 pointer-events-none z-[5]"
+          aria-hidden="true"
+        />
       )}
 
       {/* The canvas */}
