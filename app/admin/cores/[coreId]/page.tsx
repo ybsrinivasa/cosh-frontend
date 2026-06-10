@@ -67,8 +67,30 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
   // Per-language translate button state
   const [translatingLang, setTranslatingLang] = useState<string | null>(null)
   const [translateMsg, setTranslateMsg] = useState<Record<string, string>>({})
+  // Live translation progress (polled while Languages tab is open)
+  type TranslationStatus = { language_code: string; state: 'translating' | 'queued' | 'complete' | 'idle'; translated: number; total: number }
+  const [translationStatus, setTranslationStatus] = useState<Record<string, TranslationStatus>>({})
 
   useEffect(() => { load() }, [coreId])
+
+  // Poll translation status while the Languages tab is open.
+  // Cheap read-only endpoint; backs off as soon as the user leaves the tab.
+  useEffect(() => {
+    if (tab !== 'languages') return
+    let cancelled = false
+    async function fetchStatus() {
+      try {
+        const r = await api.get<TranslationStatus[]>(`/cores/${coreId}/translation-status`)
+        if (cancelled) return
+        const map: Record<string, TranslationStatus> = {}
+        for (const s of r.data) map[s.language_code] = s
+        setTranslationStatus(map)
+      } catch { /* swallow — keep polling */ }
+    }
+    fetchStatus()
+    const id = setInterval(fetchStatus, 8000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [tab, coreId])
 
   async function load() {
     try {
@@ -691,13 +713,49 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                   <div key={l.id} className="border-b border-slate-100 last:border-0">
                     {/* Language header row */}
                     <div className="flex items-center justify-between px-4 py-3">
-                      <div>
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium text-slate-800">
                           {langInfo?.language_name_en || l.language_code}
                         </span>
-                        <span className="ml-2 text-xs font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                        <span className="text-xs font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
                           {l.language_code}
                         </span>
+                        {(() => {
+                          const s = translationStatus[l.language_code]
+                          if (!s) return null
+                          if (s.state === 'translating') {
+                            const pct = s.total > 0 ? Math.round((s.translated / s.total) * 100) : 0
+                            return (
+                              <span className="inline-flex items-center gap-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+                                <LoadingSpinner size="sm" />
+                                Translating {s.translated.toLocaleString()}/{s.total.toLocaleString()} ({pct}%)
+                              </span>
+                            )
+                          }
+                          if (s.state === 'queued') {
+                            return (
+                              <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                                ⏳ Queued
+                              </span>
+                            )
+                          }
+                          if (s.state === 'complete') {
+                            return (
+                              <span className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                ✓ {s.translated.toLocaleString()} translated
+                              </span>
+                            )
+                          }
+                          // idle but has some rows — partial progress, no active task
+                          if (s.translated > 0) {
+                            return (
+                              <span className="text-xs text-slate-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-full">
+                                {s.translated.toLocaleString()}/{s.total.toLocaleString()} translated
+                              </span>
+                            )
+                          }
+                          return null
+                        })()}
                       </div>
                       <div className="flex items-center gap-2">
                         {/* Translate button */}
