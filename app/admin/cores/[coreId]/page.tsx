@@ -372,19 +372,26 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
     } finally { setImportLoading(false) }
   }
 
-  async function triggerTranslate(langCode: string, mode: 'machine_generated_only' | 'all') {
+  async function triggerTranslate(langCode: string, mode: 'machine_generated_only' | 'all', keywords?: string) {
     setTranslatingLang(langCode)
     setTranslateMsg(prev => ({ ...prev, [langCode]: '' }))
     try {
-      const { data } = await api.put(
-        `/cores/${coreId}/retranslate?lang=${langCode}&mode=${mode}`
-      )
+      const params = new URLSearchParams({ lang: langCode, mode })
+      if (keywords && keywords.trim()) params.set('keywords', keywords.trim())
+      const { data } = await api.put(`/cores/${coreId}/retranslate?${params.toString()}`)
       setTranslateMsg(prev => ({ ...prev, [langCode]: `✓ ${data.message}` }))
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } }
       setTranslateMsg(prev => ({ ...prev, [langCode]: `✗ ${err.response?.data?.detail || 'Failed'}` }))
     } finally { setTranslatingLang(null) }
   }
+
+  // "Translate Subset" — small modal for keyword-filtered re-translate.
+  // Useful after a TERM_HINTS update so you only pay for the affected
+  // items (e.g., re-translate the ~150 rows containing "Aphid" or "Mite"
+  // instead of the full Core).
+  const [subsetModalLang, setSubsetModalLang] = useState<string | null>(null)
+  const [subsetKeywords, setSubsetKeywords] = useState('')
 
   async function saveTranslationEdit() {
     if (!editingTranslation || !editingTranslationValue.trim()) return
@@ -455,6 +462,60 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
           <button className="absolute top-4 right-4 text-white text-2xl hover:text-slate-300">✕</button>
         </div>
       )}
+
+      {/* Translate Subset modal — keyword-filtered re-translate */}
+      {subsetModalLang && (() => {
+        const lc = subsetModalLang
+        const matchingCount = subsetKeywords.trim()
+          ? (() => {
+              const kws = subsetKeywords.split(',').map(k => k.trim().toLowerCase()).filter(Boolean)
+              if (kws.length === 0) return 0
+              return activeItems.filter(it => kws.some(k => it.english_value.toLowerCase().includes(k))).length
+            })()
+          : 0
+        return (
+          <Modal title={`Re-translate Subset (${lc})`} onClose={() => setSubsetModalLang(null)}>
+            <div className="space-y-4">
+              <p className="text-sm text-slate-600">
+                Re-translate only items whose English value contains any of these words.
+                Useful after correcting a TERM_HINT — e.g., enter <code className="bg-slate-100 px-1 rounded">Aphid, Mite, Mosaic</code> to refresh just those rows without paying for the full Core.
+              </p>
+              <textarea
+                value={subsetKeywords}
+                onChange={e => setSubsetKeywords(e.target.value)}
+                placeholder="Comma-separated, case-insensitive substrings"
+                rows={3}
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+              />
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-500">
+                  {subsetKeywords.trim()
+                    ? <>Will affect approximately <strong>{matchingCount.toLocaleString()}</strong> of {activeItems.length.toLocaleString()} items</>
+                    : 'Type one or more substrings'}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSubsetModalLang(null)}
+                    className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-800">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const kw = subsetKeywords.trim()
+                      if (!kw) return
+                      await triggerTranslate(lc, 'machine_generated_only', kw)
+                      setSubsetModalLang(null)
+                    }}
+                    disabled={!subsetKeywords.trim() || matchingCount === 0}
+                    className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                    Re-translate {matchingCount > 0 ? `${matchingCount} items` : ''}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </Modal>
+        )
+      })()}
 
       <div className="mb-6">
         <Link href="/admin/folders" className="text-sm text-green-600 hover:underline">← Folders</Link>
@@ -827,6 +888,14 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                           className="px-3 py-1.5 text-xs font-medium border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50 flex items-center gap-1">
                           {translatingLang === l.language_code ? <LoadingSpinner size="sm" /> : '⟳'}
                           Translate
+                        </button>
+                        {/* Translate Subset — keyword-filtered re-translate */}
+                        <button
+                          onClick={() => { setSubsetModalLang(l.language_code); setSubsetKeywords('') }}
+                          disabled={translatingLang === l.language_code}
+                          title="Re-translate only items containing specific English words (e.g., after a term correction)"
+                          className="px-2 py-1.5 text-xs font-medium border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50">
+                          Subset…
                         </button>
                         {/* Download button */}
                         <button
