@@ -58,6 +58,10 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
   const [editedDescription, setEditedDescription] = useState('')
   const [savingDescription, setSavingDescription] = useState(false)
   const [descriptionMsg, setDescriptionMsg] = useState('')
+  // Language mode — TRANSLATION (Sonnet) vs TRANSLITERATION (IndicXlit).
+  // The worker routes calls based on this. Editable on a TEXT Core only.
+  const [savingLanguageMode, setSavingLanguageMode] = useState(false)
+  const [languageModeMsg, setLanguageModeMsg] = useState('')
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [editingItemValue, setEditingItemValue] = useState('')
   const [editingItemUrl, setEditingItemUrl] = useState('')
@@ -270,6 +274,29 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
     } finally { setSavingDescription(false) }
   }
 
+  async function saveLanguageMode(newMode: 'TRANSLATION' | 'TRANSLITERATION') {
+    if (!core || core.language_mode === newMode) return
+    const confirmMsg =
+      newMode === 'TRANSLITERATION'
+        ? `Switch "${core.name}" to TRANSLITERATION mode?\n\n` +
+          `Future Translate runs will use IndicXlit (sound-preserving) instead of Sonnet (meaning-preserving). ` +
+          `Existing Machine translations stay as-is until you click Translate again — at which point they'll be regenerated in the new mode. Expert-validated rows are never touched.`
+        : `Switch "${core.name}" to TRANSLATION mode?\n\n` +
+          `Future Translate runs will use Claude Sonnet (meaning-preserving) instead of IndicXlit (sound-preserving). ` +
+          `Existing Machine translations stay as-is until you click Translate again — at which point they'll be regenerated in the new mode. Expert-validated rows are never touched.`
+    if (!confirm(confirmMsg)) return
+    setSavingLanguageMode(true); setLanguageModeMsg('')
+    try {
+      await api.put(`/cores/${coreId}`, { language_mode: newMode })
+      setLanguageModeMsg('✓ Saved')
+      await load()
+      setTimeout(() => setLanguageModeMsg(''), 2500)
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setLanguageModeMsg(err.response?.data?.detail || 'Failed to save')
+    } finally { setSavingLanguageMode(false) }
+  }
+
   async function saveItemEdit() {
     if (!editingItemValue.trim() || !editingItemId) return
     setEditingItemSaving(true)
@@ -458,6 +485,22 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
               <Badge label={core.status} variant={core.status} />
               <Badge label={core.core_type} variant={core.core_type} />
               {isMedia && core.content_type && <Badge label={core.content_type} />}
+              {!isMedia && core.language_mode && (
+                <span
+                  title={
+                    core.language_mode === 'TRANSLITERATION'
+                      ? 'Translate runs use IndicXlit — sound-preserving (brand/chemical names)'
+                      : 'Translate runs use Claude Sonnet — meaning-preserving (regular vocabulary)'
+                  }
+                  className={`text-xs font-semibold px-2 py-0.5 rounded ${
+                    core.language_mode === 'TRANSLITERATION'
+                      ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                      : 'bg-blue-100 text-blue-800 border border-blue-200'
+                  }`}
+                >
+                  {core.language_mode}
+                </span>
+              )}
             </div>
           </div>
         )}
@@ -1008,6 +1051,42 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
       {/* ── Settings tab ─────────────────────────────────────────────────── */}
       {tab === 'settings' && (
         <div className="max-w-lg space-y-6">
+          {/* Language Mode — TRANSLATION (Sonnet) vs TRANSLITERATION (IndicXlit) */}
+          {!isMedia && (
+            <div className="bg-white border border-slate-200 rounded-xl p-5">
+              <h3 className="font-medium text-slate-800 mb-1">Language Mode</h3>
+              <p className="text-sm text-slate-500 mb-4">
+                Determines which engine the worker uses when you click <strong>Translate</strong>:
+                <br />
+                <span className="text-blue-700">TRANSLATION</span> — Claude Sonnet, preserves meaning. Use this for crops, pests, diseases, deficiencies, descriptive vocabulary.
+                <br />
+                <span className="text-amber-700">TRANSLITERATION</span> — IndicXlit, preserves the sound. Use this for brand names, chemical names, and other proper nouns where meaning doesn&apos;t carry across scripts.
+              </p>
+              <div className="flex items-center gap-3">
+                <select
+                  value={core.language_mode || 'TRANSLATION'}
+                  onChange={e => saveLanguageMode(e.target.value as 'TRANSLATION' | 'TRANSLITERATION')}
+                  disabled={savingLanguageMode}
+                  className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                >
+                  <option value="TRANSLATION">TRANSLATION (Sonnet)</option>
+                  <option value="TRANSLITERATION">TRANSLITERATION (IndicXlit)</option>
+                </select>
+                {savingLanguageMode && <LoadingSpinner size="sm" />}
+                {languageModeMsg && (
+                  <span className={`text-sm ${languageModeMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {languageModeMsg}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 mt-3">
+                Switching the mode does not retroactively change existing translations. Click
+                {' '}<strong>Translate</strong>{' '}for each language on the Languages tab to regenerate
+                Machine-translated rows in the new mode. Expert-validated rows are never touched.
+              </p>
+            </div>
+          )}
+
           {/* Description — also used by Claude as domain context when translating items */}
           <div className="bg-white border border-slate-200 rounded-xl p-5">
             <h3 className="font-medium text-slate-800 mb-1">Description</h3>
