@@ -54,6 +54,10 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
   // Editing state
   const [editingCoreName, setEditingCoreName] = useState(false)
   const [editedCoreName, setEditedCoreName] = useState('')
+  // Description — read by Claude as domain context when translating items
+  const [editedDescription, setEditedDescription] = useState('')
+  const [savingDescription, setSavingDescription] = useState(false)
+  const [descriptionMsg, setDescriptionMsg] = useState('')
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [editingItemValue, setEditingItemValue] = useState('')
   const [editingItemUrl, setEditingItemUrl] = useState('')
@@ -113,6 +117,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
       setCore(c.data); setItems(i.data); setLanguages(l.data); setAllLanguages(al.data)
       setStockers(st.data)
       setAssignedStockerId(c.data.assigned_stocker_id || '')
+      setEditedDescription(c.data.description || '')
       setProducts(prods.data)
       setProductTags(ptags.data)
     } finally { setLoading(false) }
@@ -249,6 +254,20 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
       const err = e as { response?: { data?: { detail?: string } } }
       alert(err.response?.data?.detail || 'Failed to rename')
     }
+  }
+
+  async function saveDescription() {
+    if (!core) return
+    setSavingDescription(true); setDescriptionMsg('')
+    try {
+      await api.put(`/cores/${coreId}`, { description: editedDescription })
+      setDescriptionMsg('✓ Saved')
+      await load()
+      setTimeout(() => setDescriptionMsg(''), 2500)
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setDescriptionMsg(err.response?.data?.detail || 'Failed to save')
+    } finally { setSavingDescription(false) }
   }
 
   async function saveItemEdit() {
@@ -989,6 +1008,34 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
       {/* ── Settings tab ─────────────────────────────────────────────────── */}
       {tab === 'settings' && (
         <div className="max-w-lg space-y-6">
+          {/* Description — also used by Claude as domain context when translating items */}
+          <div className="bg-white border border-slate-200 rounded-xl p-5">
+            <h3 className="font-medium text-slate-800 mb-1">Description</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              A short, specific description of what this Core holds. The translation engine
+              reads this as context, so concrete domain wording (e.g.,
+              <span className="italic"> &ldquo;each row is a crop paired with one of its pests, diseases, or nutrient deficiencies, formatted as &lsquo;Crop - Pest/Disease/Deficiency&rsquo;&rdquo;</span>)
+              gives noticeably better translations than generic text.
+            </p>
+            <textarea
+              value={editedDescription}
+              onChange={e => setEditedDescription(e.target.value)}
+              rows={4}
+              placeholder="What is this Core for? Who reads its translated values?"
+              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-y"
+            />
+            <div className="flex items-center gap-3 mt-2">
+              <button
+                onClick={saveDescription}
+                disabled={savingDescription || editedDescription === (core?.description || '')}
+                className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
+                {savingDescription && <LoadingSpinner size="sm" />} Save
+              </button>
+              {descriptionMsg && (
+                <span className={`text-sm ${descriptionMsg.startsWith('✓') ? 'text-emerald-600' : 'text-red-600'}`}>{descriptionMsg}</span>
+              )}
+            </div>
+          </div>
           <div className="bg-white border border-slate-200 rounded-xl p-5">
             <h3 className="font-medium text-slate-800 mb-1">Assigned Stocker</h3>
             <p className="text-sm text-slate-500 mb-4">The Stocker responsible for adding and maintaining data in this Core.</p>
