@@ -24,15 +24,16 @@ export default function FoldersPage() {
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
   const [editingFolderName, setEditingFolderName] = useState('')
   const [editingConnectId, setEditingConnectId] = useState<string | null>(null)
+  const [showInactive, setShowInactive] = useState(false)
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [showInactive])
 
   async function load() {
     try {
       const canManage = hasRole(getStoredUser(), 'DESIGNER', 'ADMIN')
       const [f, c, s] = await Promise.all([
         api.get('/folders'),
-        api.get('/cores'),
+        api.get(showInactive ? '/cores?status=ALL' : '/cores'),
         canManage
           ? api.get('/admin/users/by-role/STOCKER').catch(() => ({ data: [] }))
           : Promise.resolve({ data: [] }),
@@ -96,7 +97,16 @@ export default function FoldersPage() {
         title="Folders & Cores"
         subtitle={`${folders.length} folders · ${cores.length} cores`}
         action={hasRole(getStoredUser(), 'DESIGNER', 'ADMIN') ? (
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showInactive}
+                onChange={e => setShowInactive(e.target.checked)}
+                className="w-3.5 h-3.5 accent-green-600"
+              />
+              Show inactive cores
+            </label>
             <button onClick={() => { setShowCoreModal(true); setError('') }}
               className="px-3 py-1.5 text-sm bg-white border border-slate-300 rounded-lg hover:bg-slate-50 font-medium">
               + New Core
