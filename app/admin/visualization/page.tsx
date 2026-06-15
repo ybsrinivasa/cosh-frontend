@@ -50,6 +50,11 @@ interface VizEdge {
   rel_type: string
   connect_id: string
   connect_name?: string
+  row_id?: string
+  // Computed locally — curvature offset + 3D rotation for the strand within
+  // its parallel-edge bundle. Set by the fan-out pass in graphData useMemo.
+  __curvature?: number
+  __rotation?: number
 }
 interface SliceOut {
   nodes: VizNode[]
@@ -192,29 +197,94 @@ export default function VisualizationPage() {
         color: coreColour.get(n.core_id) || '#888',
       })),
       links: slice.edges.map(e => {
-        const target = nodeById.get(e.target)
-        const source = nodeById.get(e.source)
-        // Smarter labels:
-        //   - IN_ROW (Connect mode spoke): label with the target's Core
-        //     name. Repeating the Connect name on every spoke is noise;
-        //     the Core name ("Symptom", "Specific Names") tells you
-        //     which slot of the row that spoke fills.
-        //   - Otherwise: show the relationship type (IS_A, AFFECTS, …).
-        let label = e.rel_type
-        if (e.rel_type === 'IN_ROW') {
-          const itemSide = target?.node_kind === 'item' ? target : source
-          label = itemSide?.core_name || e.connect_name || ''
-        }
+        // Edge label for tooltips: show the Connect name (or rel_type for
+        // non-IN_ROW edges from slice mode). The old per-position labelling
+        // was meaningful when each edge was a hub→item spoke; in the new
+        // Full Mode every Connect-mode edge is item↔item so the Connect
+        // name is the right summary.
+        const label = e.rel_type === 'IN_ROW'
+          ? (e.connect_name || 'IN_ROW')
+          : e.rel_type
         return {
           source: e.source,
           target: e.target,
           rel_type: e.rel_type,
           connect_name: e.connect_name,
+          row_id: e.row_id,
           label,
         }
       }),
     }
   }, [slice])
+
+  // Fan-out math: when multiple edges connect the same pair of nodes (very
+  // common in Full Mode Connect-slice — every row that mentions Tomato+Leaf
+  // emits a separate edge), distribute curvature + rotation across the
+  // bundle. From far away the strands overlap as a single thick line; on
+  // zoom or rotation they fan out radially as individual 3D arcs.
+  //
+  // We mutate the graphData.links in place (rather than recompute the
+  // array) so react-force-graph-3d's accessor functions can read the
+  // computed values via simple property reads — much cheaper than a Map
+  // lookup per frame.
+  const fannedLinks = useMemo(() => {
+    const links = graphData.links as any[]
+    // Group by canonical (sorted) endpoint pair.
+    const groups = new Map<string, any[]>()
+    for (const l of links) {
+      const a = String(l.source)
+      const b = String(l.target)
+      const key = a < b ? `${a}|${b}` : `${b}|${a}`
+      const g = groups.get(key)
+      if (g) g.push(l)
+      else groups.set(key, [l])
+    }
+    // For each group of size > 1, hand each member a curvature + rotation
+    // slot. Solo edges stay straight (curvature 0).
+    for (const group of groups.values()) {
+      const n = group.length
+      if (n <= 1) {
+        group[0].__curvature = 0
+        group[0].__rotation = 0
+        continue
+      }
+      // Cap visible curvature so even big bundles don't bow into the next
+      // node. 0.45 is a comfortable max before strands cross neighbours.
+      const maxCurve = Math.min(0.45, 0.08 + n * 0.012)
+      for (let i = 0; i < n; i++) {
+        // Curvature varies linearly from -maxCurve to +maxCurve so the
+        // bundle spreads symmetrically around the straight line.
+        group[i].__curvature = n === 1 ? 0 : -maxCurve + (2 * maxCurve * i) / (n - 1)
+        // Rotation walks the full 2π around the source→target axis so the
+        // bundle becomes a 3D fan, not a flat ribbon.
+        group[i].__rotation = (2 * Math.PI * i) / n
+      }
+    }
+    return links
+  }, [graphData])
+
+  // Colour legend entries — one per unique Core represented in the slice,
+  // with its colour from the same palette mapping the canvas uses and a
+  // count so the user can see at a glance which Cores dominate the view.
+  const legend = useMemo(() => {
+    if (!slice) return [] as { coreName: string; color: string; count: number }[]
+    const seen = new Map<string, { coreName: string; color: string; count: number }>()
+    for (const n of graphData.nodes as any[]) {
+      const key = n.core_name || n.core_id
+      const existing = seen.get(key)
+      if (existing) {
+        existing.count += 1
+      } else {
+        seen.set(key, { coreName: n.core_name || 'Unknown', color: n.color, count: 1 })
+      }
+    }
+    return Array.from(seen.values()).sort((a, b) => b.count - a.count)
+  }, [slice, graphData])
+
+  // Touch fannedLinks so React's useMemo runs it for its in-place mutation
+  // side effect (writing __curvature/__rotation onto each link object that
+  // the ForceGraph3D's accessor functions then read).
+  void fannedLinks.length
 
   // ── Click handler: fly + maybe expand ─────────────────────────────────────
   const handleNodeClick = useCallback((node: any) => {
@@ -311,8 +381,16 @@ export default function VisualizationPage() {
   // DOM layer that's positioned per-frame using the lib's screen projector.
   // pointer-events:none keeps drag/click reaching the canvas underneath.
   const labelLayerRef = useRef<HTMLDivElement | null>(null)
+  // Above this node count the overlay labels stop being readable — they
+  // overlap into clouds of text. Hide them; rely on the colour legend +
+  // hover tooltip (`nodeLabel="name"` on the ForceGraph3D) for context.
+  const NODE_LABEL_LIMIT = 30
   useEffect(() => {
     if (!slice || !fgRef.current || !labelLayerRef.current) return
+    if ((slice.nodes?.length ?? 0) > NODE_LABEL_LIMIT) {
+      labelLayerRef.current.innerHTML = ''
+      return
+    }
     const fg = fgRef.current
     const layer = labelLayerRef.current
     layer.innerHTML = ''
@@ -548,6 +626,29 @@ export default function VisualizationPage() {
         />
       )}
 
+      {/* Colour legend — top-right floating panel. Shows each Core's name
+          with its node colour. Most useful when adaptive labels hide the
+          text overlay because the graph is dense. */}
+      {slice && legend.length > 0 && (
+        <div className="absolute top-4 right-4 z-10 bg-[#0d1418]/90 backdrop-blur-md
+                        border border-white/10 rounded-2xl p-3 shadow-2xl text-white
+                        max-h-[50vh] overflow-y-auto text-xs min-w-[180px]">
+          <div className="font-semibold text-green-300 mb-2 tracking-wide">Legend</div>
+          <div className="space-y-1.5">
+            {legend.map(({ coreName, color, count }) => (
+              <div key={coreName} className="flex items-center gap-2">
+                <span
+                  className="inline-block w-3 h-3 rounded-full shrink-0 border border-white/20"
+                  style={{ background: color }}
+                />
+                <span className="text-white/85 flex-1 truncate" title={coreName}>{coreName}</span>
+                <span className="text-white/40">{count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* The canvas */}
       {slice ? (
         <ForceGraph3D
@@ -562,6 +663,10 @@ export default function VisualizationPage() {
           linkColor={() => 'rgba(160, 200, 240, 0.45)'}
           linkWidth={1.2}
           linkOpacity={0.85}
+          // Per-edge fan-out: __curvature and __rotation are pre-computed
+          // per strand by the fannedLinks useMemo above.
+          linkCurvature={(l: any) => l.__curvature || 0}
+          linkCurveRotation={(l: any) => l.__rotation || 0}
           linkLabel={(l: any) => l.label || ''}
           // In-canvas edge labels via SpriteText. Only render them when
           // the graph is small enough that 135+ floating texts don't
