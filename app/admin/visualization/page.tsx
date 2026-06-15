@@ -382,7 +382,17 @@ export default function VisualizationPage() {
       if (cancelled) return
       for (const { node, el } of entries) {
         const x = node.x, y = node.y, z = node.z
-        if (x == null || y == null) { el.style.opacity = '0'; raf = requestAnimationFrame(tick); continue }
+        // Earlier versions of this loop scheduled requestAnimationFrame
+        // INSIDE this branch (and again at the end of tick), which
+        // multiplied the number of pending frames whenever any node had
+        // a not-yet-positioned coordinate. That snowballed within seconds
+        // and starved the canvas thread — surfacing as "drag broken" plus
+        // an eventual "Page Unresponsive" dialog. The correct shape is:
+        // do the per-node work, then schedule ONE next frame at the end.
+        if (x == null || y == null) {
+          el.style.opacity = '0'
+          continue
+        }
         try {
           const p = fg.graph2ScreenCoords(x, y, z ?? 0)
           if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) {
