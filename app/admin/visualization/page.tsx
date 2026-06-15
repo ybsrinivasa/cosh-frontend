@@ -321,10 +321,16 @@ export default function VisualizationPage() {
       fg.d3Force('link').distance(60)
       fg.d3ReheatSimulation()
     } catch {}
-    const t = setTimeout(() => {
-      try { fg.refresh() } catch {}
-    }, 100)
-    return () => clearTimeout(t)
+    // Refresh twice: the first call rebuilds three.js objects after the
+    // initial render so DragControls binds to fully-formed node meshes
+    // (without this, the FIRST Visualise click leaves drag dead). The
+    // second call is belt-and-suspenders for slower machines / slices
+    // where mesh assignment lags past 250ms. Multiple refresh() calls
+    // are idempotent in the lib — the second one is a no-op if the
+    // scene is already settled.
+    const t1 = setTimeout(() => { try { fg.refresh() } catch {} }, 250)
+    const t2 = setTimeout(() => { try { fg.refresh() } catch {} }, 700)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
   }, [slice])
 
   // ── Always-visible HTML-overlay node labels ──────────────────────────────
