@@ -453,11 +453,15 @@ export default function VisualizationPage() {
       {/* Filter panel.
           Width caps at 20rem (320px) on desktop but shrinks to fit narrow
           viewports — at ~360px phone widths the rigid w-80 was overflowing
-          the iframe and triggering horizontal page scroll. */}
+          the iframe and triggering horizontal page scroll.
+          max-height is capped at 50% of the iframe viewport on mobile so
+          it doesn't dominate the canvas — without this, the panel's
+          ~400px of content stacks on top of a 420px iframe and leaves no
+          room for the 3D graph behind. */}
       <div className="absolute top-2 left-2 right-2 sm:right-auto sm:top-4 sm:left-4 z-10
                       w-auto sm:w-80 max-w-[20rem] bg-[#0d1418]/90 backdrop-blur-md
                       border border-white/10 rounded-2xl p-3 sm:p-5 shadow-2xl text-white
-                      max-h-[calc(100vh-1rem)] sm:max-h-[calc(100vh-2rem)] overflow-y-auto">
+                      max-h-[50vh] sm:max-h-[calc(100vh-2rem)] overflow-y-auto">
         <h2 className="text-sm font-semibold tracking-wide text-green-300 mb-3">
           Knowledge Graph Slice
         </h2>
