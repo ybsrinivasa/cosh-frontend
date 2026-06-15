@@ -590,7 +590,13 @@ export default function VisualizationPage() {
             node.fz = node.z
           }}
           warmupTicks={50}
-          cooldownTicks={Infinity}
+          // Let the simulation cool down after layout converges instead
+          // of running forever. With Infinity, the per-frame force solve
+          // + label overlay + particle animations kept the GPU/CPU pinned
+          // on a long demo tab and caused hangs (Karnataka Agri Dept demo,
+          // 2026-06-15). 400 ticks lets nodes settle visibly; drag re-heats
+          // the simulation automatically when the user grabs a node.
+          cooldownTicks={400}
         />
       ) : (
         <div className="absolute inset-0 flex items-center justify-center text-white/40 text-sm pointer-events-none">
