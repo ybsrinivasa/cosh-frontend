@@ -105,6 +105,10 @@ export default function VisualizationPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [focusedNode, setFocusedNode] = useState<VizNode | null>(null)
+  // Whether the filter panel is collapsed to a thin header chip. Default
+  // expanded so a visitor can see the controls; auto-collapses after
+  // Visualise so the graph dominates the canvas.
+  const [panelCollapsed, setPanelCollapsed] = useState(false)
 
   // Lazy import three-spritetext — used for in-canvas edge labels only.
   // (Bloom + sprite-on-node were tried in a previous iteration and made
@@ -149,7 +153,10 @@ export default function VisualizationPage() {
         api.get<SliceOut>('/embed/viz/connect-slice', {
           params: { connect_id: seed.id },
         })
-          .then(({ data }) => setSlice(data))
+          .then(({ data }) => {
+            setSlice(data)
+            if (data.nodes.length > 0) setPanelCollapsed(true)
+          })
           .catch(() => {})
           .finally(() => setLoading(false))
       })
@@ -191,11 +198,13 @@ export default function VisualizationPage() {
         }
         const { data } = await api.get<SliceOut>('/embed/viz/slice', { params })
         setSlice(data)
+        if (data.nodes.length > 0) setPanelCollapsed(true)
       } else {
         const params: Record<string, string> = { connect_id: pickedConnect!.id }
         if (anchorItem) params.anchor_id = anchorItem.id
         const { data } = await api.get<SliceOut>('/embed/viz/connect-slice', { params })
         setSlice(data)
+        if (data.nodes.length > 0) setPanelCollapsed(true)
       }
     } catch (e: any) {
       setError(e?.response?.data?.detail || 'Failed to load slice')
@@ -458,13 +467,32 @@ export default function VisualizationPage() {
           it doesn't dominate the canvas — without this, the panel's
           ~400px of content stacks on top of a 420px iframe and leaves no
           room for the 3D graph behind. */}
-      <div className="absolute top-2 left-2 right-2 sm:right-auto sm:top-4 sm:left-4 z-10
+      <div className={`absolute top-2 left-2 right-2 sm:right-auto sm:top-4 sm:left-4 z-10
                       w-auto sm:w-80 max-w-[20rem] bg-[#0d1418]/90 backdrop-blur-md
-                      border border-white/10 rounded-2xl p-3 sm:p-5 shadow-2xl text-white
-                      max-h-[50vh] sm:max-h-[calc(100vh-2rem)] overflow-y-auto">
-        <h2 className="text-sm font-semibold tracking-wide text-green-300 mb-3">
-          Knowledge Graph Slice
-        </h2>
+                      border border-white/10 rounded-2xl shadow-2xl text-white
+                      ${panelCollapsed
+                        ? 'p-2 sm:p-2.5'
+                        : 'p-3 sm:p-5 max-h-[50vh] sm:max-h-[calc(100vh-2rem)] overflow-y-auto'}`}>
+        {/* Header — always visible. The chevron toggles the collapsed
+            state so the user can hide the controls to give the 3D graph
+            the whole canvas, or expand to filter again. */}
+        <button
+          onClick={() => setPanelCollapsed(c => !c)}
+          className="w-full flex items-center justify-between gap-2 text-left"
+          aria-label={panelCollapsed ? 'Expand filter panel' : 'Collapse filter panel'}
+        >
+          <h2 className="text-sm font-semibold tracking-wide text-green-300">
+            Knowledge Graph Slice
+          </h2>
+          <span className="text-white/50 text-xs leading-none select-none">
+            {panelCollapsed ? '▾' : '▴'}
+          </span>
+        </button>
+
+        {/* Everything below the header is hidden when collapsed. */}
+        {!panelCollapsed && (
+        <>
+        <div className="h-3" />
 
         {/* Mode toggle */}
         <div className="flex bg-[#1a2228] rounded-lg p-1 mb-5 text-xs">
@@ -589,28 +617,34 @@ export default function VisualizationPage() {
           </div>
         )}
 
-        {/* Colour legend — lives inside the filter panel so the canvas
-            stays uncluttered. One row per Core represented in the slice,
-            with its palette colour and a count. Sorted by count so the
-            dominant Cores rise to the top. */}
-        {slice && legend.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-white/10">
-            <div className="text-[10px] uppercase tracking-wider text-white/40 mb-2">Legend</div>
-            <div className="space-y-1.5 text-xs">
-              {legend.map(({ coreName, color, count }) => (
-                <div key={coreName} className="flex items-center gap-2">
-                  <span
-                    className="inline-block w-3 h-3 rounded-full shrink-0 border border-white/20"
-                    style={{ background: color }}
-                  />
-                  <span className="text-white/85 flex-1 truncate" title={coreName}>{coreName}</span>
-                  <span className="text-white/40">{count}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+        </>
         )}
       </div>
+
+      {/* Floating colour legend — lives on the canvas, independent of the
+          filter panel. The panel collapses freely without losing the key
+          to the colours. Two-column grid so it stays compact even with
+          8+ Cores in the slice. */}
+      {slice && legend.length > 0 && !focusedNode && (
+        <div className="absolute bottom-2 left-2 right-2 sm:right-auto sm:bottom-4 sm:left-4 z-10
+                        w-auto sm:max-w-[22rem] bg-[#0d1418]/85 backdrop-blur-md
+                        border border-white/10 rounded-2xl px-3 py-2.5 sm:px-4 sm:py-3 shadow-2xl
+                        text-white pointer-events-auto">
+          <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1.5">Legend</div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+            {legend.map(({ coreName, color, count }) => (
+              <div key={coreName} className="flex items-center gap-1.5 min-w-0">
+                <span
+                  className="inline-block w-2.5 h-2.5 rounded-full shrink-0 border border-white/20"
+                  style={{ background: color }}
+                />
+                <span className="text-white/85 flex-1 truncate" title={coreName}>{coreName}</span>
+                <span className="text-white/40 shrink-0">{count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Node detail panel.
           Same responsive rules as the filter panel — caps at w-72 on
