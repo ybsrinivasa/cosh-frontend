@@ -50,9 +50,16 @@ interface VizEdge {
   rel_type: string
   connect_id: string
   connect_name?: string
-  row_id?: string
+  // Number of rows that produced this edge (Connect-mode only). 1 for
+  // slice-mode edges and any Connect edge that came from a single row.
+  weight?: number
+  // Rows that produced this edge — populated by /viz/connect-slice. Each
+  // entry is a ConnectDataItem.id; the frontend can look up its details
+  // later for the click-drill-down view.
+  row_ids?: string[]
   // Computed locally — curvature offset + 3D rotation for the strand within
-  // its parallel-edge bundle. Set by the fan-out pass in graphData useMemo.
+  // its parallel-edge bundle. Set by the fan-out pass; still fires when
+  // the same two items genuinely connect through multiple Connects.
   __curvature?: number
   __rotation?: number
 }
@@ -210,7 +217,8 @@ export default function VisualizationPage() {
           target: e.target,
           rel_type: e.rel_type,
           connect_name: e.connect_name,
-          row_id: e.row_id,
+          weight: e.weight ?? 1,
+          row_ids: e.row_ids,
           label,
         }
       }),
@@ -661,13 +669,28 @@ export default function VisualizationPage() {
           nodeOpacity={0.95}
           nodeResolution={20}
           linkColor={() => 'rgba(160, 200, 240, 0.45)'}
-          linkWidth={1.2}
+          // Weighted line width: weight 1 → ~1.0, weight 10 → ~2.0,
+          // weight 100 → ~3.0. Log scale keeps high-weight edges
+          // emphasised without bloating low-weight ones. Capped at 4.
+          linkWidth={(l: any) => {
+            const w = l.weight ?? 1
+            return Math.min(4, 1 + Math.log10(Math.max(1, w)))
+          }}
           linkOpacity={0.85}
           // Per-edge fan-out: __curvature and __rotation are pre-computed
-          // per strand by the fannedLinks useMemo above.
+          // per strand by the fannedLinks useMemo above. With per-row
+          // edges removed, this now fires only when the SAME two items
+          // are genuinely connected through MULTIPLE different Connects
+          // (small N, beautiful fan).
           linkCurvature={(l: any) => l.__curvature || 0}
           linkCurveRotation={(l: any) => l.__rotation || 0}
-          linkLabel={(l: any) => l.label || ''}
+          linkLabel={(l: any) => {
+            // Tooltip shows the Connect name + a row count when weight > 1
+            // so users can SEE how strong a relationship is on hover.
+            const base = l.label || ''
+            const w = l.weight ?? 1
+            return w > 1 ? `${base}  ·  ${w} rows` : base
+          }}
           // In-canvas edge labels via SpriteText. Only render them when
           // the graph is small enough that 135+ floating texts don't
           // smother the scene. Threshold tuned by eye on local data.
