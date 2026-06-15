@@ -123,12 +123,36 @@ export default function VisualizationPage() {
   const fgRef = useRef<any>(null)
 
   // ── Bootstrap ──────────────────────────────────────────────────────────────
+  // The embed page lives inside an iframe on eywa.farm/cosh.html, so a
+  // first-time visitor lands with no idea what to click. To avoid the
+  // "I couldn't find the visualization" reaction (the canvas is just
+  // black until something is picked + Visualise is clicked), we auto-fire
+  // a default Connect-mode slice as soon as the connects-list loads. The
+  // user can then change filters and re-render normally.
   useEffect(() => {
     api.get<{ cores: CoreOption[] }>('/embed/viz/filter-options')
       .then(r => setAllCores(r.data.cores))
       .catch(() => setError('Failed to load Cores'))
     api.get<{ connects: ConnectOption[] }>('/embed/viz/connects-list')
-      .then(r => setAllConnects(r.data.connects))
+      .then(r => {
+        setAllConnects(r.data.connects)
+        // Pick a default Connect that's dense enough to look alive but
+        // not so dense it overwhelms — 15 to 80 rows is the sweet spot.
+        // Fallback to the first available Connect if none match.
+        const seed = r.data.connects.find(
+          c => c.active_item_count >= 15 && c.active_item_count <= 80
+        ) || r.data.connects[0]
+        if (!seed) return
+        setMode('connect')
+        setPickedConnect(seed)
+        setLoading(true)
+        api.get<SliceOut>('/embed/viz/connect-slice', {
+          params: { connect_id: seed.id },
+        })
+          .then(({ data }) => setSlice(data))
+          .catch(() => {})
+          .finally(() => setLoading(false))
+      })
       .catch(() => {})
   }, [])
 
@@ -426,10 +450,14 @@ export default function VisualizationPage() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="relative h-screen w-full overflow-hidden bg-[#05080a]">
-      {/* Filter panel */}
-      <div className="absolute top-4 left-4 z-10 w-80 bg-[#0d1418]/90 backdrop-blur-md
-                      border border-white/10 rounded-2xl p-5 shadow-2xl text-white
-                      max-h-[calc(100vh-2rem)] overflow-y-auto">
+      {/* Filter panel.
+          Width caps at 20rem (320px) on desktop but shrinks to fit narrow
+          viewports — at ~360px phone widths the rigid w-80 was overflowing
+          the iframe and triggering horizontal page scroll. */}
+      <div className="absolute top-2 left-2 right-2 sm:right-auto sm:top-4 sm:left-4 z-10
+                      w-auto sm:w-80 max-w-[20rem] bg-[#0d1418]/90 backdrop-blur-md
+                      border border-white/10 rounded-2xl p-3 sm:p-5 shadow-2xl text-white
+                      max-h-[calc(100vh-1rem)] sm:max-h-[calc(100vh-2rem)] overflow-y-auto">
         <h2 className="text-sm font-semibold tracking-wide text-green-300 mb-3">
           Knowledge Graph Slice
         </h2>
@@ -580,10 +608,14 @@ export default function VisualizationPage() {
         )}
       </div>
 
-      {/* Node detail panel */}
+      {/* Node detail panel.
+          Same responsive rules as the filter panel — caps at w-72 on
+          desktop but shrinks (and slides to the bottom on phones, where
+          the filter panel already occupies the top). */}
       {focusedNode && (
-        <div className="absolute top-4 right-4 z-10 w-72 bg-[#0d1418]/90 backdrop-blur-md
-                        border border-white/10 rounded-2xl p-5 shadow-2xl text-white">
+        <div className="absolute bottom-2 left-2 right-2 sm:bottom-auto sm:top-4 sm:right-4 sm:left-auto z-10
+                        w-auto sm:w-72 max-w-[18rem] bg-[#0d1418]/90 backdrop-blur-md
+                        border border-white/10 rounded-2xl p-3 sm:p-5 shadow-2xl text-white">
           <div className="flex items-start justify-between mb-2">
             <h3 className="text-sm font-semibold truncate" title={focusedNode.label}>
               {focusedNode.label}
