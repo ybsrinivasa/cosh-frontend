@@ -634,13 +634,14 @@ export default function VisualizationPage() {
           nodeOpacity={0.95}
           nodeResolution={20}
           linkColor={() => 'rgba(160, 200, 240, 0.45)'}
-          // Weighted line width: weight 1 → ~1.0, weight 10 → ~2.0,
-          // weight 100 → ~3.0. Log scale keeps high-weight edges
-          // emphasised without bloating low-weight ones. Capped at 4.
-          linkWidth={(l: any) => {
-            const w = l.weight ?? 1
-            return Math.min(4, 1 + Math.log10(Math.max(1, w)))
-          }}
+          // Static linkWidth (was an accessor function returning a log-
+          // scaled value derived from edge weight). Function accessors on
+          // link props in react-force-graph-3d 1.29 appear to silently
+          // break DragControls binding — same family of bug as the curve
+          // accessors we already pulled. Reverting to static restores
+          // drag. Density signal moved to the hover tooltip via linkLabel
+          // ("Pest Diagnosis · 50 rows"), which is good enough for now.
+          linkWidth={1.2}
           linkOpacity={0.85}
           // Note: the per-edge curvature/rotation accessors that powered
           // the 3D fan were removed 2026-06-15. They forced every edge
