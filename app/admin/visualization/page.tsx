@@ -556,6 +556,28 @@ export default function VisualizationPage() {
             )}
           </div>
         )}
+
+        {/* Colour legend — lives inside the filter panel so the canvas
+            stays uncluttered. One row per Core represented in the slice,
+            with its palette colour and a count. Sorted by count so the
+            dominant Cores rise to the top. */}
+        {slice && legend.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-white/10">
+            <div className="text-[10px] uppercase tracking-wider text-white/40 mb-2">Legend</div>
+            <div className="space-y-1.5 text-xs">
+              {legend.map(({ coreName, color, count }) => (
+                <div key={coreName} className="flex items-center gap-2">
+                  <span
+                    className="inline-block w-3 h-3 rounded-full shrink-0 border border-white/20"
+                    style={{ background: color }}
+                  />
+                  <span className="text-white/85 flex-1 truncate" title={coreName}>{coreName}</span>
+                  <span className="text-white/40">{count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Node detail panel */}
@@ -592,34 +614,6 @@ export default function VisualizationPage() {
           className="absolute inset-0 pointer-events-none z-[5]"
           aria-hidden="true"
         />
-      )}
-
-      {/* Colour legend — top-right floating panel. Shows each Core's name
-          with its node colour. Most useful when adaptive labels hide the
-          text overlay because the graph is dense.
-          pointer-events-none is critical: without it the panel intercepts
-          drag attempts that begin (or land) in the top-right region of the
-          canvas. The legend isn't interactive, so blocking pointer events
-          on it loses nothing. */}
-      {slice && legend.length > 0 && (
-        <div className="absolute top-4 right-4 z-10 bg-[#0d1418]/90 backdrop-blur-md
-                        border border-white/10 rounded-2xl p-3 shadow-2xl text-white
-                        max-h-[50vh] overflow-y-auto text-xs min-w-[180px]
-                        pointer-events-none">
-          <div className="font-semibold text-green-300 mb-2 tracking-wide">Legend</div>
-          <div className="space-y-1.5">
-            {legend.map(({ coreName, color, count }) => (
-              <div key={coreName} className="flex items-center gap-2">
-                <span
-                  className="inline-block w-3 h-3 rounded-full shrink-0 border border-white/20"
-                  style={{ background: color }}
-                />
-                <span className="text-white/85 flex-1 truncate" title={coreName}>{coreName}</span>
-                <span className="text-white/40">{count}</span>
-              </div>
-            ))}
-          </div>
-        </div>
       )}
 
       {/* The canvas */}
