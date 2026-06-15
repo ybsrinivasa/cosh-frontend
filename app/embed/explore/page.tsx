@@ -648,8 +648,29 @@ export default function VisualizationPage() {
         />
       )}
 
+      {/* Empty-state message: slice returned successfully but found nothing
+          to draw. Without this, the canvas just goes black after Visualise
+          and users assume the system broke. Slice-mode hint nudges them
+          toward Connect mode, which catches symptom/image Cores that have
+          no direct Core→Core edges. */}
+      {slice && slice.nodes.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center px-6 z-[6] pointer-events-none">
+          <div className="max-w-sm text-center text-white/70 text-sm bg-[#0d1418]/85
+                          border border-white/10 rounded-2xl p-5">
+            <p className="font-semibold text-white mb-1.5">No connections found</p>
+            <p className="text-xs leading-relaxed text-white/60">
+              This category doesn't have direct relationships to other categories.
+              Try the <span className="text-green-300">By Connect</span> tab and
+              pick something like <span className="text-green-300">Pest Diagnosis</span>
+              {' '}or <span className="text-green-300">Trade Names</span>, or pick a
+              different category here.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* The canvas */}
-      {slice ? (
+      {slice && slice.nodes.length > 0 ? (
         <ForceGraph3D
           ref={fgRef}
           graphData={graphData}
@@ -719,7 +740,7 @@ export default function VisualizationPage() {
           // the simulation automatically when the user grabs a node.
           cooldownTicks={400}
         />
-      ) : (
+      ) : slice ? null : (
         <div className="absolute inset-0 flex items-center justify-center text-white/40 text-sm pointer-events-none">
           Pick a filter (or a Connect) and click Visualise.
         </div>
