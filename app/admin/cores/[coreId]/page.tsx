@@ -739,7 +739,7 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                               <button onClick={() => { setEditingItemId(item.id); setEditingItemValue(item.english_value) }}
                                 className="text-slate-300 hover:text-slate-600 text-sm" title="Edit value">✎</button>
                             )}
-                            <span className="text-xs text-slate-400">{item.translations.length} trans.</span>
+                            <span className="text-xs text-slate-400">{item.translations.filter(t => t.language_code !== 'en').length} trans.</span>
                             <button onClick={() => setExpandedItem(expandedItem === item.id ? null : item.id)}
                               className="text-xs text-green-600 hover:underline">
                               {expandedItem === item.id ? 'hide' : 'view'}
@@ -754,11 +754,11 @@ export default function CoreDetailPage({ params }: { params: Promise<{ coreId: s
                     </div>
                     {expandedItem === item.id && (
                       <div className="px-4 pb-3">
-                        {item.translations.length === 0 ? (
+                        {item.translations.filter(t => t.language_code !== 'en').length === 0 ? (
                           <p className="text-xs text-slate-400 italic">No translations yet — go to Languages tab to trigger translation.</p>
                         ) : (
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                            {item.translations.map(t => {
+                            {item.translations.filter(t => t.language_code !== 'en').map(t => {
                               const isEditingThis = editingTranslation?.itemId === item.id && editingTranslation?.langCode === t.language_code
                               return (
                                 <div key={t.id} className="bg-slate-50 rounded-lg px-3 py-2 group">
