@@ -56,10 +56,41 @@ export default function SyncPage() {
     } finally { setLoadingHistoryId(null) }
   }
 
+  // True while any sync for the selected product is still in flight.
+  // Drives both the auto-poll below and the Dispatch button's guard.
+  const hasInFlight = history.some(h => h.status === 'DISPATCHED')
+
   useEffect(() => {
     if (!isAdmin(getStoredUser())) { setLoading(false); return }
     loadProducts()
   }, [])
+
+  // While a sync row is DISPATCHED, the Celery task hasn't committed yet:
+  // pending-changes counts and entity-selector contents are stale until it
+  // does. Poll history (cheap) + products + change table so the UI catches up
+  // on its own. Stops the moment no DISPATCHED rows remain.
+  useEffect(() => {
+    if (!selected || !hasInFlight) return
+    let cancelled = false
+    const tick = async () => {
+      try {
+        const [hi, pr] = await Promise.all([
+          api.get(`/sync/${selected}/history`),
+          api.get('/sync/products'),
+        ])
+        if (cancelled) return
+        setHistory(hi.data)
+        setProducts(pr.data)
+        const stillInFlight = hi.data.some((h: SyncHistory) => h.status === 'DISPATCHED')
+        if (!stillInFlight) {
+          const ch = await api.get(`/sync/${selected}/changes`)
+          if (!cancelled) setChangeTable(ch.data)
+        }
+      } catch { /* keep polling on transient errors */ }
+    }
+    const interval = setInterval(tick, 3000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [selected, hasInFlight])
 
   async function loadProducts() {
     try {
@@ -259,13 +290,19 @@ export default function SyncPage() {
               <button onClick={dispatch}
                 disabled={
                   dispatching ||
+                  hasInFlight ||
                   (syncMode === 'INCREMENTAL' && selectedEntities.size === 0) ||
                   (syncMode === 'FULL' && selectedFullEntities.size === 0)
                 }
                 className="w-full py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2">
                 {dispatching && <LoadingSpinner size="sm" />}
-                {dispatching ? 'Dispatching…' : 'Dispatch Sync'}
+                {dispatching ? 'Dispatching…' : hasInFlight ? 'Sync in flight…' : 'Dispatch Sync'}
               </button>
+              {hasInFlight && (
+                <p className="mt-2 text-xs text-amber-600">
+                  A sync is still running for this product. Counts above will refresh automatically when it completes.
+                </p>
+              )}
               {dispatchResult && (
                 <p className={`mt-2 text-xs ${dispatchResult.startsWith('✓') ? 'text-emerald-600' : 'text-red-600'}`}>
                   {dispatchResult}
