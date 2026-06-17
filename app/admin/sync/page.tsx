@@ -67,24 +67,27 @@ export default function SyncPage() {
 
   // While a sync row is DISPATCHED, the Celery task hasn't committed yet:
   // pending-changes counts and entity-selector contents are stale until it
-  // does. Poll history (cheap) + products + change table so the UI catches up
-  // on its own. Stops the moment no DISPATCHED rows remain.
+  // does. Poll history every 3s; once the row flips out of DISPATCHED, do a
+  // full state refresh via selectProduct so products card + change table +
+  // history + tagged entities all reflect post-sync truth in one shot.
   useEffect(() => {
     if (!selected || !hasInFlight) return
     let cancelled = false
     const tick = async () => {
       try {
-        const [hi, pr] = await Promise.all([
-          api.get(`/sync/${selected}/history`),
-          api.get('/sync/products'),
-        ])
+        const hi = await api.get(`/sync/${selected}/history`)
         if (cancelled) return
-        setHistory(hi.data)
-        setProducts(pr.data)
         const stillInFlight = hi.data.some((h: SyncHistory) => h.status === 'DISPATCHED')
-        if (!stillInFlight) {
-          const ch = await api.get(`/sync/${selected}/changes`)
-          if (!cancelled) setChangeTable(ch.data)
+        if (stillInFlight) {
+          // Mid-flight — keep history fresh + refresh card counts (cheap).
+          const pr = await api.get('/sync/products')
+          if (cancelled) return
+          setHistory(hi.data)
+          setProducts(pr.data)
+        } else {
+          // Sync just finished. Full refresh — replaces window.location.reload
+          // without the flicker / loss of scroll / mode + selection state.
+          await selectProduct(selected)
         }
       } catch { /* keep polling on transient errors */ }
     }
@@ -104,12 +107,18 @@ export default function SyncPage() {
     setSelected(productId); setSelectedEntities(new Set()); setDispatchResult('')
     setLoadingChanges(true)
     try {
-      const [ch, hi, te] = await Promise.all([
+      // /sync/products is bundled in so the card counts refresh whenever the
+      // user clicks a product card. Otherwise the badge stays whatever it was
+      // at page-mount time and drifts out of sync with the change table as the
+      // translation worker keeps emitting events in the background.
+      const [ch, hi, te, pr] = await Promise.all([
         api.get(`/sync/${productId}/changes`),
         api.get(`/sync/${productId}/history`),
         api.get(`/sync/${productId}/tagged-entities`).catch(() => ({ data: [] })),
+        api.get('/sync/products'),
       ])
       setChangeTable(ch.data); setHistory(hi.data); setTaggedEntities(te.data)
+      setProducts(pr.data)
       // FULL mode default = everything tagged is selected (mirrors old behaviour)
       setSelectedFullEntities(new Set(te.data.map((e: TaggedEntity) => e.entity_id)))
     } finally { setLoadingChanges(false) }
