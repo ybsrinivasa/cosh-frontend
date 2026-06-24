@@ -119,8 +119,12 @@ export default function SyncPage() {
       ])
       setChangeTable(ch.data); setHistory(hi.data); setTaggedEntities(te.data)
       setProducts(pr.data)
-      // FULL mode default = everything tagged is selected (mirrors old behaviour)
-      setSelectedFullEntities(new Set(te.data.map((e: TaggedEntity) => e.entity_id)))
+      // FULL mode default = nothing selected. The user must explicitly tick
+      // what to push — or hit Select all if they really mean everything.
+      // 2026-06-24: changed from "all-selected by default" after the user
+      // accidentally dispatched a sitewide FULL because the panel landed
+      // pre-ticked. Opt-in is the right default for a destructive-ish action.
+      setSelectedFullEntities(new Set())
     } finally { setLoadingChanges(false) }
   }
 
